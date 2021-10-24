@@ -1,0 +1,313 @@
+---
+title: "Simulation Study Document"
+author: "Paul Harmon"
+date: "5/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+source("OutlierCompFunctions.R")
+library(ggplot2)
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(magrittr)
+library(knitr)
+library(Rtsne)
+library(robustHD)
+library(GGally)
+library(stringr)
+library(plotly)
+library(R.utils)
+library(vegan)
+library(mnormt)
+
+```
+
+
+# Introduction
+
+This doc contains simulation studies around the efficacy of a Permanova-based method for identifying influential points in a t-SNE or MDS map.  The document steps through a process of simulating data from 3 different groups (currently, these groups are clearly separated) with *3* influential points simulated on a standardized scale 5-6 standard deviations above the observed data. 
+
+The code below outlines the number of simulations run - currently this number is small for computational ease but will be increased (with the use of adaptive Permanova methods). 
+
+```{r}
+n_sims = 100
+
+#create a bunch of lists to store stuff later
+plot_data_list <- list()
+plot_tsne_results_list <- list()
+plot_mds_results_list <- list()
+plot_tsne_fstat_results_list <- list()
+plot_mds_fstat_results_list <- list()
+results_list <- list()
+df3list = df2list = list()
+```
+
+The below chunk runs the simulations. Each iteration simulates a new (contaminated) dataset, runs the t-SNE and MDS mapping procedure, and tests the consistency of the configurations for each of the *n* holdout points. 
+
+
+```{r original_sims, eval = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+
+for(j in 1:n_sims){
+  
+  
+  #### Simulate the Data
+  
+  g1 <- rmnorm(n = 10, mean = rep(20, 10), diag(25, 10)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(50, 20), diag(25, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(80, 30), diag(25, 30)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 10), rep("2", 20), rep("3", 30)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ## adds outliers in the last 3 indices (simulating from normal based on 5 sd's from mean)
+  add_outliers <- rbind(rnorm(10, 5, .5), rnorm(10, 5, .5), rnorm(10, 5, .5)) %>% as_tibble()
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",3))
+  
+  
+  #Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In")
+  plot_data_list[[j]] <- datplot
+  
+  
+  
+  #### Run the Permanova mapping
+  
+  
+  x3 <- MultiPermanova(yes_structure_final[,1:10])
+  
+  results_list[[j]] <- x3
+  
+  df2 = tibble(Holdout = 1:length(x3$tsnelist), PValues = sapply(x3$tsnelist, pullPval), Fstat = sapply(x3$tsnelist, pullFstat))
+  df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
+  df2list[[j]] = df2
+  
+  #### TSNE Plots########################################################
+  #Visualize the results and store in a list
+  sigplot <- ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
+  plot_tsne_results_list[[j]] <- sigplot
+  
+  #Visualize the f stats and store in a list
+  sigplotf <- ggplot(df2, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: F Stats From Adonis")
+  plot_tsne_fstat_results_list[[j]] <- sigplotf
+  
+  
+  ### CMD Plots #########################################################
+  df3 = tibble(Holdout = 1:length(x3$cmdlist), PValues = sapply(x3$cmdlist, pullPval), Fstat = sapply(x3$cmdlist, pullFstat))
+    df3$Colors <- ifelse(df3$PValues < 0.05, TRUE, FALSE)
+  df3list[[j]] = df3
+  
+  
+  #Visualize the results and store in a list
+  sigplot2 <- ggplot(df3, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+  plot_mds_results_list[[j]] <- sigplot2
+  
+  #Visualize the f stats and store in a list
+  sigplot2f <- ggplot(df3, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: F Stats From Adonis")
+  plot_mds_fstat_results_list[[j]] <- sigplot2f
+  
+  
+  
+  
+}
+```
+
+
+```{r sims_v2, eval = TRUE, cache = TRUE, warning = FALSE, message = FALSE}
+
+for(j in 1:n_sims){
+  
+  
+  #### Simulate the Data with outliers adn a single group (simulates all from one group)
+  
+  g1 <- rmnorm(n = 10, mean = rep(20, 10), diag(45, 10)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(50, 20), diag(45, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(80, 30), diag(45, 30)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 10), rep("2", 20), rep("3", 30)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ## adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",3))
+  
+  
+  #Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+  plot_data_list[[j]] <- datplot
+  
+  
+  
+  #### Run the Permanova mapping
+  
+  x3 <- MultiPermanova(yes_structure_final[,1:10])
+  
+  results_list[[j]] <- x3
+  
+  df2 = tibble(Holdout = 1:length(x3$tsnelist), PValues = sapply(x3$tsnelist, pullPval), Fstat = sapply(x3$tsnelist, pullFstat))
+  df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
+  df2list[[j]] = df2
+  
+  #### TSNE Plots########################################################
+  #Visualize the results and store in a list
+  sigplot <- ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
+  plot_tsne_results_list[[j]] <- sigplot
+  
+  #Visualize the f stats and store in a list
+  sigplotf <- ggplot(df2, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: F Stats From Adonis")
+  plot_tsne_fstat_results_list[[j]] <- sigplotf
+  
+  
+  ### CMD Plots #########################################################
+  df3 = tibble(Holdout = 1:length(x3$cmdlist), PValues = sapply(x3$cmdlist, pullPval), Fstat = sapply(x3$cmdlist, pullFstat))
+    df3$Colors <- ifelse(df3$PValues < 0.05, TRUE, FALSE)
+  df3list[[j]] = df3
+  
+  
+  #Visualize the results and store in a list
+  sigplot2 <- ggplot(df3, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+  plot_mds_results_list[[j]] <- sigplot2
+  
+  #Visualize the f stats and store in a list
+  sigplot2f <- ggplot(df3, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: F Stats From Adonis")
+  plot_mds_fstat_results_list[[j]] <- sigplot2f
+  
+  
+  
+  
+}
+```
+
+
+
+# Results {.tabset}
+
+The simulated datasets can be seen in the tabset below. 
+
+## PlotList
+```{r}
+library(ggpubr)
+#ggarrange(plotlist = plot_data_list)
+print(plot_data_list)
+```
+
+
+## Summary Metrics
+
+We can start to look at some results below. The code generates the rate of correctly classified influential points for both the MDS (shown first) and t-SNE maps. The MDS correctly classifies the influential point *some* of the time, but the t-SNE method very rarely classifies the influential points as having an impact on the configuration. 
+
+```{r}
+
+#print the head of the df lists
+df3list %>% head(3)
+### Identify the number of CORRECTLY Classified influential points
+#extract the p-values from the last 3 from MDS
+influential_correct <- function(temp){length(which(tail(temp, 3)$PValues < 0.05))/3}
+mds_correct <- lapply(df3list, influential_correct)
+
+# extract the pvalues from the last 3 of the t-SNE
+tsne_correct <- lapply(df2list, influential_correct)
+
+dat = tibble(MDS = unlist(mds_correct), TSNE = unlist(tsne_correct))
+#plot(dat$MDS, dat$TSNE)
+
+
+mds_correct %>% unlist() %>% mean() %>% kable(col.names = "MDS Percent Correctly Classified")
+tsne_correct %>% unlist() %>% mean() %>% kable(col.names = "t-SNE Percent Correctly Classified")
+
+```
+
+
+Now we can look at the rate of misclassified non-influential points. These are the 60 'regular' points that are spuriously detected as outliers. Each percentage is calculated as a percentage of the 60 that are NOT small p-values (currenlty < 0.05 without a correction). We want a high percentage of correctly-identified non-influential points (although given the machinery of the hypothesis tests used, we would expect at least some spurious detections). 
+
+Both are relatively high percentages (as we would expect) - but the t-SNE hovers right around the expected 0.95 and MDS is higher. 
+
+```{r}
+
+### Identify rate of CORRECTLY Classified non-influential points
+#extract the p-values from the last 3 from MDS
+ni_correct <- function(temp){length(which(head(temp, 60)$PValues >= 0.05))/60} 
+
+correct_mds <- lapply(df3list, ni_correct)
+#kable(correct_mds, col.names = "Correctly Identified Non-Influential: MDS")
+
+# extract the pvalues from the last 3 of the t-SNE
+correct_tsne <- lapply(df2list, ni_correct)
+#kable(correct_tsne, col.names = "Correctly Identified Non-Influential: tSNE")
+
+
+correct_mds %>% unlist() %>% mean() %>% kable(col.names = "MDS Percent Correctly Classified Non-Influential")
+correct_tsne %>% unlist() %>% mean() %>% kable(col.names = "t-SNE Percent Correctly Classified Non-Influential")
+
+```
+
+# Plots {.tabset}
+
+## MDS P Values
+
+
+Plots are shown below for the MDS . 
+
+```{r}
+plot_mds_results_list
+```
+
+## MDS F Stats
+
+```{r}
+plot_mds_fstat_results_list
+```
+
+
+## tSNE
+
+```{r}
+plot_tsne_results_list
+```
+
+## t-SNE F Stats
+
+```{r}
+plot_tsne_fstat_results_list
+```
+
+
+
+
+
+
+
+

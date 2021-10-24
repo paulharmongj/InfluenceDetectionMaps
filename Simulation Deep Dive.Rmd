@@ -1,0 +1,462 @@
+---
+title: "Simulation Deep Dive"
+author: "Paul Harmon"
+date: "10/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+source("OutlierCompNew.R")
+library(ggplot2)
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(magrittr)
+library(knitr)
+library(Rtsne)
+library(robustHD)
+library(GGally)
+library(stringr)
+library(plotly)
+library(R.utils)
+library(vegan)
+library(mnormt)
+
+
+
+correctInfluence = function(result_df){
+  tmp <- tail(result_df,1)
+  det_rate <- length(which(tmp$PValues <= 0.05))/nrow(tmp)
+  return(det_rate)}
+
+# Correctly Identified Non-Influential
+#head(df3list[[1]], 60)
+
+correctNonInfluence = function(result_df){
+  tmp <- head(result_df,60)
+  det_rate <- length(which(tmp$PValues > 0.05))/nrow(tmp)
+  return(det_rate)}
+
+
+spuriousInfluence = function(result_df){
+  tmp <- result_df
+  det_rate <- length(which(result_df$PValues <= 0.05))/nrow(tmp)
+  return(det_rate)}
+
+#then the non-influential 
+meantest = function(df){
+  mean(df$PValues)
+}
+
+```
+
+# Intro
+
+This document shows some of the results from a handful of different simulations. In general, we consider a situation where the data are arranged in 3 groups of varying width and variability. Each simulation fixes the sample size within groups and all groups are simulated from multivariate normals with 10 features. Additionally, only a SINGLE influential point is considered at present. 
+
+In most scenarios, 61 observations are used - except when no outliers are present. 
+
+Simulation scenarios: 
+
++ Influential point "bounces around" within range of 3 groups
++ Influential point is "smaller" ~ 3 SD below average
++ Influential point is "larger" ~ 3 SD above average
++ No outliers (only 60 observations)
+
+Pending Scenarios:
+
++ Wider range of influential points
++ Wider spread of groups
++ More dimensions than 10
++ Influence on only a subset of features
+
+
+# Multiple Groups
+
+## Data
+
+```{r}
+g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(rnorm(10, 0, 1)) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+## Results
+
+```{r}
+mds1 <- readRDS("2021-10-16_simulation1_mds_list.RDS")
+tsne1 <- readRDS("2021-10-16_simulation1_tsne_list.RDS")
+
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+
+#mean detection rates
+mean(ci1)
+mean(cni1)
+
+mean(ci2)
+mean(cni2)
+
+
+```
+
+# Larger 
+
+## Data 
+
+```{r}
+ g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(rnorm(10, 3, .5)) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+
+## Results
+
+```{r}
+mds1 <- readRDS("2021-10-17_simulationlarger_mds_list.RDS")
+tsne1 <- readRDS("2021-10-17_simulationlarger_tsne_list.RDS")
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+
+#mean detection rates
+mean(ci1)
+mean(cni1)
+
+mean(ci2)
+mean(cni2)
+
+
+```
+
+
+# Smaller
+
+## Data 
+
+```{r}
+ g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(rnorm(10, -3, .5)) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+  
+```
+
+
+## Results
+```{r}
+mds1 <- readRDS("2021-10-18_simulationsmaller_mds_list.RDS")
+tsne1 <- readRDS("2021-10-18_simulationsmaller_tsne_list.RDS")
+
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+
+#mean detection rates
+mean(ci1)
+mean(cni1)
+
+mean(ci2)
+mean(cni2)
+
+
+```
+
+
+
+# No Outliers
+
+## Data 
+```{r}
+ g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### No outliers - only 60 observations in this dataset 
+  
+  yes_structure_final <- yes_structure_scale
+  yes_structure_final$Group <- c(yes_structure$Group)
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+
+## Results
+```{r}
+#2021-10-18_simulationsmaller_mds_list
+
+mds1 <- readRDS("2021-10-19_simulationNone_mds_list.RDS")
+tsne1 <- readRDS("2021-10-19_simulationNone_tsne_list.RDS")
+
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, spuriousInfluence)
+cni1 <- 1-cni1
+
+
+#MDS
+ci2 <- sapply(df3list, spuriousInfluence)
+cni2 <- 1 - cni2
+
+
+#mean detection rates
+mean(ci1)
+mean(cni1)
+
+mean(ci2)
+mean(cni2)
+
+
+```
+
+
+
+
+
+
+
+
+# One Group
+
+## Data
+
+A look at the data, which is simulated from multivariate normal with a single group. 
+
+```{r}
+ g1 <- rmnorm(n = 10, mean = rep(40, 60), diag(35, 60)) %>%
+    t() %>%
+    data.frame()
+
+  yes_structure <- g1 %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 60)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",3))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+
+## Results 
+We see that the proportion of correctly-identified influential points seems to go down as we constrain the shape of the data to a single group. 
+
+```{r}
+mds2 <- readRDS("2021-10-08_simulation2_mds_list.RDS")
+tsne2 <- readRDS("2021-10-08_simulation2_tsne_list.RDS")
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne2
+df3list  <- mds2
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+
+#mean detection rates
+mean(ci1)
+mean(cni1)
+
+mean(ci2)
+mean(cni2)
+
+```
+
+
+# Computation Time
+
+```{r}
+pt1 <- readRDS('perf_time_1017.RDS')
+pt2 <- readRDS('perf_time_cmd_1017.RDS')
+
+
+unlist(pt1)
+#unlist(pt2)
+
+
+pt1 %>% unlist() %>% as_tibble() %>% ggplot(aes(value)) + geom_histogram(bins = 10) + xlab("Minutes") + ggtitle("Computation Time - TSNE Runs") + theme_bw()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

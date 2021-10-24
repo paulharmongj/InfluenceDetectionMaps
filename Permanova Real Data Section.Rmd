@@ -1,0 +1,142 @@
+---
+title: 'Permanova: Real Data Analysis'
+author: "Paul Harmon"
+date: "7/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("OutlierCompFunctions.R")
+library(ggplot2)
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(magrittr)
+library(knitr)
+library(Rtsne)
+library(robustHD)
+library(GGally)
+library(stringr)
+library(plotly)
+library(R.utils)
+library(vegan)
+library(mnormt)
+```
+
+# Introduction
+
+This document overviews the real data analysis portion of the t-SNE/MDS/Permanova paper. We are currently looking at two specific datasets: Palmer Penguins and Carnegie Classifications. 
+
+
+# Carnegie
+
+Looks at the 2015 Carnegie Classification data - without doing much, to see how the data are changed. 
+
+## Raw Data
+
+```{r, cache = TRUE}
+CC2015 <- read.csv("https://raw.githubusercontent.com/paulharmongj/Carnegie_SEM/master/data/CC2015data.csv")
+
+CC2015_filter <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) %>% select(PDNFRSTAFF, S.ER.D, NONS.ER.D, FACNUM, HUM_RSD, STEM_RSD, OTHER_RSD, SOCSC_RSD)
+perplexity = 30
+
+## NEED TO STANDARDIZE THE DATA FIRST (MAKE UNITLESS)
+CCscale <- CC2015_filter %>% lapply(scale) %>% as_tibble()
+
+out <- MultiPermanova(CCscale)
+
+```
+
+
+```{r}
+#generate some plots of the output
+df3 = tibble(Holdout = 1:length(out$cmdlist), PValues = sapply(out$cmdlist, pullPval), Fstat = sapply(out$cmdlist, pullFstat))
+df3$Colors <- ifelse(df3$PValues < 0.05, TRUE, FALSE)
+
+  
+  
+  #Visualize the results and store in a list
+cc <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) 
+  cc$NAME[which(df3$PValues < 0.05)]
+  df3$Name <- cc$NAME
+  sigplot2 <- ggplot(df3, aes(Holdout, Fstat, label = Name)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+  sigplot2 %>% ggplotly()
+  
+  
+  
+  
+
+```
+
+
+
+## Scaled with Per-Capita Features
+
+This version looks at the same input variables but considers the set of features that are scaled in the per-capita version. Due to high degrees of correlation between the raw inputs and some of their per-capita counterparts, I only included the per-capita versions for STEM expenditures, Non-STEM research expenditures, and tenurable research faculty count. 
+
+```{r, cache = TRUE, eval = FALSE}
+CC2015_filter_PC <- CC2015_filter %>% mutate(S.ER.DPC = S.ER.D/FACNUM, NONS.ER.DPC = NONS.ER.D/FACNUM, STAFFPC = PDNFRSTAFF/FACNUM)
+
+out2 <- MultiPermanova(CC2015_filter_PC)
+
+```
+
+
+## Plots with Permutations
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggridges)
+
+
+
+histlist1 <- list()
+histlist2 <- list()
+
+for(j in 1:length(out$tsnelist)){
+  histlist1[[j]] <- out$tsnelist[[j]]$f.perms %>% as_tibble() %>% ggplot(aes(V1)) + geom_histogram(bins = 10)
+  histlist2[[j]] <-  out$cmdlist[[j]]$f.perms %>% as_tibble() %>% ggplot(aes(V1)) + geom_density() + scale_x_log10()
+}
+
+
+f1Fs_long %>% ggplot(mapping=aes(y=Number, x=value, fill = factor(stat(quantile)))) +
+    stat_density_ridges(geom = "density_ridges_gradient",
+    calc_ecdf = TRUE,
+    quantiles = 0.95, 
+    alpha=0.3,
+    scale=2
+    ) +
+    scale_fill_manual(
+    name = "Probability", values = c("#A0A0A0A0", "#FF0000A0"),
+    labels = c("(0, 0.95]", "(0.95, 1]")
+    )  +
+   scale_x_continuous(limits = c(-1, 3.5)) +
+    geom_point(data=observed, mapping=aes(y=Number, x=FA), inherit.aes = F) +
+  geom_line(data=observed, mapping=aes(y=Number, x=FA), inherit.aes=F) +
+    coord_flip() + 
+    theme_ridges() + 
+  geom_vline(xintercept=0, col="grey")
+
+```
+
+
+
+
+
+
+
+## "Extreme" points added in
+
+The goal here is to add a couple "extreme" points and see how this method handles the original "influential" points. 
+
+```{r, eval = FALSE}
+
+```
+
+
+
+# Palmer 

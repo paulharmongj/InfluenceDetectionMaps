@@ -1,0 +1,159 @@
+---
+title: "Python Methods for Skillz App"
+author: "Paul Harmon"
+date: "8/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Reads in the python files that we'll use. 
+
+```{python}
+import numpy as np
+import pandas as pd
+
+peopleSkillz = pd.read_csv("https://raw.githubusercontent.com/AtriumAI/InternalSkillzApp/Keely26/issue138/temp_data%20/peopleSkillz.csv?token=AFIT5TOPNWUQ7MJN2ZYIGO3BGKWAC")
+roleSkillz = pd.read_csv("https://raw.githubusercontent.com/AtriumAI/InternalSkillzApp/Keely26/issue138/temp_data%20/roleSkillz.csv?token=AFIT5TJ4TKCRILP5FNP7LX3BGKWEC")
+
+peopleSkillz.head()
+roleSkillz.head()
+```
+
+```{python}
+prankings = pd.read_csv("C:/Users/paulh/Downloads/people_rankings.csv")
+roles_temp = pd.read_csv("C:/Users/paulh/Downloads/people_rankings.csv")
+
+roles_temp.head()
+```
+
+```{python}
+#skill: array of skills for a given person
+#role: array of roles for a given person
+def match_skillz(persondf, roledf): 
+  temp = persondf >= role 
+  pct = sum(temp)/temp.size
+  return pct
+```
+
+
+
+
+
+
+
+```{python}
+#Method to generate a comparison between two vectors
+
+
+#temp = np.array([3,3,2])  np.array([3,4,3])
+#sum(temp)/temp.size
+
+
+#peopleSkillz.columns.values.tolist()[1:]
+#roleSkillz.columns.values.tolist()[3:]
+
+#peopleSkillz[peopleSkillz.columns.values.tolist()[:]]
+peopleSkillz[peopleSkillz['full_name'] == "Weisbeck, Keely"]
+```
+
+
+```{python}
+##need a function to take role skillz and people skillz and just return a single array
+
+def return_consultant(full_name): 
+   df = peopleSkillz[peopleSkillz['full_name'] == full_name].iloc[0,1:]
+   return df
+   
+```
+
+```{python}
+return_consultant("Weisbeck, Keely")
+return_consultant("Harmon, Paul")
+```
+
+```{python}
+
+def return_role(role_name): 
+   df = roleSkillz[roleSkillz['name'] == role_name].iloc[0,3:]
+   return df
+
+```
+
+```{python}
+return_role('Data Scientist')
+```
+
+
+
+```{python}
+
+#skill: array of skills for a given person
+#role: array of roles for a given person
+def match_skillz(skill, role): 
+  temp = skill >= role 
+  pct = sum(temp)/temp.size
+  return pct
+
+
+
+
+
+```
+
+
+
+```{python}
+t1 = np.array([3,4,5])
+t2 = np.array([4,2,2])
+match_skillz(t1, t2)
+```
+```{python}
+roleSkillz.iloc[0:3, 0:1]
+```
+
+
+
+```{python}
+
+## Script
+# pick a role
+# pick a consultant
+
+
+# run the comparison
+personskill = return_consultant("Weisbeck, Keely") 
+personskill
+role = return_role('Data Scientist') 
+role
+temp = match_skillz(personskill, role)
+
+
+print("Match Score is:\n", temp)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

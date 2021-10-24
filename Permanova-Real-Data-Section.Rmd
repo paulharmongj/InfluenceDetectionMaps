@@ -1,0 +1,93 @@
+---
+title: 'Permanova: Real Data Analysis'
+author: "Paul Harmon"
+date: "6/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("OutlierCompFunctions.R")
+library(ggplot2)
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(magrittr)
+library(knitr)
+library(Rtsne)
+library(robustHD)
+library(GGally)
+library(stringr)
+library(plotly)
+library(R.utils)
+library(vegan)
+library(mnormt)
+```
+
+# Introduction
+
+This document overviews the real data analysis portion of the t-SNE/MDS/Permanova paper. We are currently looking at two specific datasets: Palmer Penguins and Carnegie Classifications. 
+
+
+# Carnegie
+
+Looks at the 2015 Carnegie Classification data - without doing much, to see how the data are changed. 
+
+## Raw Data
+
+```{r, cache = TRUE}
+CC2015 <- read.csv("https://raw.githubusercontent.com/paulharmongj/Carnegie_SEM/master/data/CC2015data.csv")
+
+CC2015_filter <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) %>% select(PDNFRSTAFF, S.ER.D, NONS.ER.D, FACNUM, HUM_RSD, STEM_RSD, OTHER_RSD, SOCSC_RSD)
+perplexity = 30
+
+out <- MultiPermanova(CC2015_filter)
+```
+
+
+```{r}
+#generate some plots of the output
+df3 = tibble(Holdout = 1:length(out$cmdlist), PValues = sapply(out$cmdlist, pullPval), Fstat = sapply(out$cmdlist, pullFstat))
+df3$Colors <- ifelse(df3$PValues < 0.05, TRUE, FALSE)
+
+  
+  
+  #Visualize the results and store in a list
+  sigplot2 <- ggplot(df3, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+  sigplot2
+  
+  
+  cc <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) 
+  cc$NAME[which(df3$PValues < 0.05)]
+  
+
+```
+
+
+
+## Scaled
+
+This version looks at the same input variables but considers the set of features that are scaled in the per-capita version. Due to high degrees of correlation between the raw inputs and some of their per-capita counterparts, I only included the per-capita versions for STEM expenditures, Non-STEM research expenditures, and tenurable research faculty count. 
+
+```{r, cache = TRUE
+}
+CC2015_filter_PC <- CC2015_filter %>% mutate(S.ER.DPC = S.ER.D/FACNUM, NONS.ER.DPC = NONS.ER.D/FACNUM, STAFFPC = PDNFRSTAFF/FACNUM)
+
+out2 <- MultiPermanova(CC2015_filter_PC)
+
+```
+
+
+## "Extreme" points added in
+
+The goal here is to add a couple "extreme" points and see how this method handles the original "influential" points. 
+
+```{r, eval = FALSE}
+
+```
+
+
+
+# Palmer 

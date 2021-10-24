@@ -1,0 +1,65 @@
+---
+title: "TSNE Introduction"
+author: "Paul Harmon"
+date: "6/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Rtsne)
+```
+
+# Introduction
+
+This chapter should act as a pseudo-paper that breaks out the derviation and mathematical details of t-SNE in detail. Additionally, should overview the pros and cons of the method and discuss how it should be used. 
+
+This will act as an addendum to my introduction section but should also be submittable as a stand-alone paper. 
+
+
+## How is t-SNE used
+
+One of the notable new methods for high-dimensional data visualization is t-distributed Stochastic Neighbor Embedding, or t-SNE (Van der Maaten, 2011). Since the time that Laurens Van der Maaten published the first t-SNE paper in 2011, it has been cited more than 21,000 times in use cases ranging from biology (Amir et al, 2013) and genetics () to economics (https://economics.yale.edu/sites/default/files/files/Faculty/Tsyvinski/tSNE_draft15.pdf) to natural language processing (https://aneesha.medium.com/using-tsne-to-plot-a-subset-of-similar-words-from-word2vec-bb8eeaea6229) and machine learning.  The method's prevalence is astounding - it is used not only in academia but in industry problems, including tools like FoodGenius (https://github.com/foodgenius/tsneplot). 
+
+The method centers on calculation of a balance between two similarity metrics. The first, called $p_{ij}$,is a conditional probability based on the Euclidean distance between pairs of points in the high-dimensional space. In the lower-dimensional representation, this similarity is defined as $q_{ij}$.
+
+A good representation of the high-dimensional space should mean that $p_{ij}$ and $q_{ij}$ look reasonably similar to each other; since these are both simply joint probabilities, the objective function of t-SNE is simply a symmetricized Kullbeck-Leibler divergence between the two, defined below: 
+
+$$C = \sum_{i} \sum_{j} p_{j|i} log(\frac{p_{j|i}}{q_{j|i}})$$ 
+
+t-SNE is an improvement over Stochastic Neightbor Embedding (SNE), which makes use of Gaussian distributions to model both $p$ and $q$ make preserving local structure somewhat difficult. Most of the minimization of objective functions is done via gradient descent (and some methods require simulated annealing because the algorithm can get caught in local optima). Critically, because the optimization is non-convex, and as a consequence of the gradient descent methods used to optimize it, t-SNE has the potential to provide different maps when run on the same data at the same perplexity. 
+
+
+## Other Ordination Methods
+
+### SNE
+### MDS/Sammon Mapping
+### Umap
+
+
+
+# t-SNE Algorithm and Math
+
+## Derivation
+
+## Mathematical Details
+
+## PCA as Initial Step
+
+## Considerations
+
+
+# Perplexity
+
+## Cost Decreases as Function of Perplexity
+
+## Perplexity 
+
+
+
+
+
+
+
+
+

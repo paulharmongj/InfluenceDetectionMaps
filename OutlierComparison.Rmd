@@ -1,0 +1,666 @@
+---
+title: "Outlier Detection in High-Dimensional Methods"
+author: "Paul Harmon"
+date: "3/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(magrittr)
+library(knitr)
+library(Rtsne)
+library(robustHD)
+library(GGally)
+library(stringr)
+library(plotly)
+library(R.utils)
+library(vegan)
+library(mnormt)
+
+```
+
+
+# Introduction
+
+This document outlines a method for identification of multivariate outliers using several different methods for mapping high-dimensional data in lower-dimensional spaces.  The goal of this analysis is to identify a situation where the results of these maps are distorted or altered by the presence of a multivariate outlier. 
+
+
+## Methods Analyzed
+
+This document assesses the effect of multivariate outliers on the maps produced by two methods: classical multidimensional scaling and t-SNE. In general, we seek to identify either **multivariate outliers** (or groups of them) or alternatively single influential points that, for some reason, cause large differences in the shape of the resulting ordination. 
+
+Our Permanova-based approach is as follows: 
+
+1. For each observation in the dataset, remove it, and generate a t-SNE map in 2 dimensions from the resulting (n-1) observations.  (For accounting purposes, it may make sense to keep the nx1 structure but replace the holdout observation with NA). 
+2. Generate a distance matrix of the nx1 by 2 matrix. Do this for each of the held-out observations. 
+3. Vectorize the distance matrix and generate a correlation matrix from the combination of these vectorized distances.
+4. Convert that correlation matrix (of all the hold-out vectorized distance matrices) into a distance matrix. 
+5. Apply non-parametric PERMANOVA tests for each holdout observation - this means that on a 100-observation dataset, you apply 100 individual tests where each test uses an independent variable that is equal to 1 for the index of the holdout observation and 0 elsewhere. 
+
+We will discuss correcting p-values for multiple testing later, although currently our plan is to assess using Bonferroni corrections (or something relatively conservative). We would expect that if the maps are suitably distorted, or *influenced* by a single point, the resulting p-value for the jth adonis test would be small. 
+
+
+
+# Literature Review 
+
+This section overviews some work into identifying multivariate outliers that we've looked into.  We have not found much in the way of users applying Mantel tests or Permanova-type tests on t-SNE or Classical MDS results in the way that we are thinking about things.  In fact, much of the literature around robustness and outliers centers on dealing with the problem rather than identifying it.  
+
+Blouvshtein and Cohen-Or (2018) analyzed the effect of outliers on the maps produced by classical multidimensional scaling methods.  In general, these methods are not particularly robust to the effects of multivariate outlier.  They propose a method to detect outliers prior to the generation of the MDS map so that they can be removed from the data. Their method involves treating the distances input to the algorithm as edges of a complete graph that connects each data point. 
+
+These edges $d1, d2, d3$ can then be used to form triangles - in general, outliers tend to *break* the triangle inequality and inliers tend to satisfy it. They recommend a rule to examine the histogram H of $b$, the number of edges of broken triangles, and generate a threshold $\phi$ that is intended to identify inliers vs. outliers. 
+
+
+Two other papers, including Forrero and Giannakis (2012) as well as Kong et al. (2019) frame the problem in a slightly different way. They consider a penalized *stress* metric for optimization, utilizing regularization to better identify outlier points.  In both cases, they are able to identify outliers using a majorization-minimization procedure that iteratively produce more outlier-robust maps of the lower-dimensional embedding of interest. 
+
+
+
+
+
+# Data 
+
+The data I'm using refers to statistics (att, commpletions, yds, yards per attempt, TD, INT, longest play, sacks, and game points) for NFL quarterbacks in 2016. Since the data are at the game level, I took a subset of only 100 game/QB combinations (to reduce the computation time since this is a proof of concept). Because we are utilizing robust methods for standardizing the data, we remove the INT from consideration. 
+
+```{r nfl_readin, echo = TRUE}
+
+nfl <- read_csv("C:/Users/paulh/Downloads/QBStats_2016.csv")
+nfl_f <- filter(nfl, att > 5)
+
+
+
+nfl_s <- nfl_f %>% dplyr::select(qb, att, cmp, yds, ypa, td, int, lg, sack, game_points)
+
+set.seed(2521)
+nfl_subset <- nfl_s[sample(1:nrow(nfl_s), 100),]
+```
+
+
+The code chunk below is set to be ignored. This adds an outlier value, then scales it. We are going to move forward with the opposite approach. 
+```{r add_outlier_first, eval = TRUE}
+#### Data Scaling: #####
+nfl_subset[101,] <- list("Outlier OutlierO. Outlier",95,14,750,2,7,3,99,2,54)
+## Scales the data with robust scaling passing centerfun = median and mean abs dev as scale fxn
+library(robustHD) #standardize function
+nfl_fin2 <- nfl_fin <- nfl_subset %>% select(-c(qb, int)) %>% lapply(standardize, centerFun = median, scaleFun = mad) %>% as_tibble()
+```
+
+
+```{r, scale_then_outlier, eval = FALSE, echo = FALSE}
+## Alternatively, scales the outlier and adds the new data
+nfl_fin2 <- nfl_fin <- nfl_subset %>% select(-c(qb,int)) %>% lapply(scale) %>% as_tibble()
+
+## adds the outlier on the scaled version
+nfl_fin2[101,] <- list(6, 5,6,5,5,6,5,5)
+
+
+#####
+```
+
+
+```{r nflparcord}
+#extracts a readable name for the Name Column
+nfl_subset$qbname <- lapply(str_split(nfl_subset$qb, " "),`[[`, 1)  %>% unlist()
+
+## Show a PCP of the players with outlier (on unscaled data)
+ggparcoord(as.matrix(nfl_subset), columns = 2:10, group = 11, scale = 'uniminmax') + ggtitle("QB Data: Unscaled") + theme_bw()
+
+nfl_fin2$Group <- c(rep("O",100), "Outlier") %>% factor()
+nfl_fin2$Alpha <- ifelse(nfl_fin2$Group == "Outlier", .99, 0.5)
+
+nfl_fin2$Alpha <- ifelse(nfl_fin2$Group == "Outlier", .99, 0.5)
+
+ggparcoord(as.matrix(nfl_fin2), columns = 1:8, groupColumn = 9, alphaLines = 0.8, showPoints = TRUE) + ggtitle("QB Data: Scaled") + theme_bw() + scale_color_viridis_d(direction = -1, end = 0.95)
+
+ggparcoord(as.matrix(nfl_fin2), columns = 1:8, groupColumn = 9,alphaLines = 0.8, showPoints = TRUE, scale = 'uniminmax') + ggtitle("QB Data: Scaled With UniMinMax") + theme_bw() + scale_color_viridis_d(direction = -1, end = 0.95)
+
+```
+
+# Method
+
+The approach is as follows, applied for each method: 
+
++ Hold out each observation and produce a map. 
++ For each map, generate a distance matrix and vectorize it. 
++ Run Permanova test for each of the holdouts
++ Assess p-values to identify the outlier point
+
+
+# Results
+
+## Classical MDS
+
+The results for the classical MDS method are shown below. 
+
+```{r nfl_1, include = TRUE}
+
+n <- nrow(nfl_fin)
+maplist <- list()
+cmdlist <- list()
+
+#generate t-SNE
+for(j in 1:n){
+  
+  #hold out a single row of the data (in the jth row)
+  #note - have to remove, as t-SNE doesn't like NAs
+  nfl_holdout <- nfl_fin[-j,]
+  
+  #calculate distances FIRST
+  nfl_dist <- dist(nfl_holdout)
+  
+  #generate the classical MDS
+  mds1 <- cmdscale(nfl_dist, k = 2)
+  cmdlist[[j]] <- mds1
+  
+  #generate the t-SNE map and store x,y in map list
+  x <- Rtsne(nfl_dist, perplexity = 10, pca = FALSE, is_distance = TRUE)
+  maplist[[j]] <- x$Y
+  
+}
+
+# Maplist is a list of t-SNE results where the j-th index needs to be inserted as an NA
+# Ditto for cmdlist except this results from the classical multidimensional scaling
+
+
+#library(R.utils) #for insert function
+maplist_new <- list()
+cmdlist_new <- list()
+
+for(j in 1:length(maplist)){
+  #create temporary vectors with NAs for each of the XY coordingates
+  tempX <- insert(maplist[[j]][,1], j, NA)
+  tempY <- insert(maplist[[j]][,2], j, NA)
+  
+  tempcmdX <- insert(cmdlist[[j]][,1], j, NA)
+  tempcmdY <- insert(cmdlist[[j]][,2], j, NA)
+  
+  maplist_new[[j]] <- tibble(X = tempX, Y = tempY)
+  cmdlist_new[[j]] <- tibble(X = tempcmdX, Y = tempcmdY)
+}
+
+
+head(maplist_new[[1]])
+head(cmdlist_new[[1]])
+
+head(maplist_new[[3]])
+head(cmdlist_new[[3]])
+```
+
+
+
+Now we step through the distance matrix calculation, vectorization, and permanova assessment for both t-SNE and the Classical Multidimensional Scaling. 
+
+```{r nfl_step2}
+vectorize_dist <- function(df) {
+  tmp <- dist(df)
+  vec <- c(tmp)
+return(vec)}
+
+#vectorizes the distances and outputs a list of vectorized distance matrices 
+dist_list <- lapply(maplist_new, vectorize_dist)
+dist_list_cmd <- lapply(cmdlist_new, vectorize_dist)
+
+
+
+## takes the vectorized distance matrices and smashes them into a single data frame - to build correlation matrix
+
+dist_mat <- dist_list %>% as_tibble(.name_repair = "minimal")
+dist_mat_cmd <- dist_list_cmd %>% as_tibble(.name_repair = "minimal")
+
+#had to remove the NAs here to get this to run (as it removes when I try to use complete.obs later on)
+#dist_df_na <- sapply(dist_mat, na.omit) %>% as_tibble(.name_repair = "minimal")
+#since I'm using pairwise complete obs, I shouldn't need to do this
+
+cormat <- cor(dist_mat, use = "pairwise.complete.obs", method = "pearson")
+cormat %>% dim()
+
+
+cormat_cmd <- cor(dist_mat_cmd, use = "pairwise.complete.obs", method = "pearson")
+cormat_cmd %>% dim()
+
+
+##generate distance on correlation matrix
+cordist <- sqrt(2*(1-cormat)) %>% as.dist()
+cordist_cmd <- sqrt(2*(1-cormat_cmd)) %>% as.dist()
+
+
+```
+
+
+Now we can step through the permanova tests for both the Classical MDS and the t-SNE: 
+
+```{r nfl_step3}
+#distob <- dist(maplist[[j]])
+model_list <- list()
+model_list_cmd <- list()
+
+
+#Step through the permanova
+for(j in 1: nrow(as.matrix(cordist))){
+  #generate the indicator variable for each feature
+  indicator_df <- rep(0, nrow(maplist_new[[1]])) %>% as.data.frame()
+  indicator_df_cmd <- rep(0, nrow(cmdlist_new[[1]])) %>% as.data.frame()
+  
+  names(indicator_df) <- names(indicator_df_cmd) <- "Indicator"
+  indicator_df$Indicator[j] = 1
+  indicator_df_cmd$Indicator[j] = 1
+  
+  #each item in the list is an Adonis test using the indicator for the holdout variable
+  model_list[[j]] <- adonis(cordist ~ Indicator, data = indicator_df)
+  model_list_cmd[[j]] <- adonis(cordist_cmd ~ Indicator, data = indicator_df_cmd)
+}
+
+pullPval <- function(x){temp <- x$aov.tab$`Pr(>F`[1]; return(temp)}
+```
+
+
+
+Visualizes the results from the CMDS.
+```{r cmds1}
+df3 = tibble(Holdout = 1:101, Pvalues = sapply(model_list_cmd, pullPval))
+df3$Colors <- ifelse(df3$Pvalues < 0.05, "tomato2", "blue4")
+ggplot(df3, aes(Holdout, Pvalues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+
+which(df3$Pvalues < 0.05)
+
+```
+
+
+
+Visualizes the results from the t-SNE. 
+```{r tsne1}
+df2 = tibble(Holdout = 1:101, PValues = sapply(model_list, pullPval))
+df2$Colors <- ifelse(df2$PValues < 0.05, "tomato2", "blue4")
+ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
+
+
+which(df2$PValues < 0.05)
+```
+
+Interestingly, the Permanova results show significant results for the outlier when examining the CMDS method. For t-SNE, this is not the case, even at different levels of perplexity. 
+
+
+
+```{r pcplookup}
+#look back at a PCP that shows the "significant" multivariate responses 
+nfl_fin2$tsnePvals <- df2$Colors
+nfl_fin2$cmdPvals <- df3$Colors
+ggparcoord(as.matrix(nfl_fin2), columns = 1:8, groupColumn = 11,alphaLines = 0.9, showPoints = TRUE, scale = 'uniminmax') + ggtitle("QB Data: Colored By Significant Permanova Results") + theme_bw() + scale_color_viridis_d(direction = -1, end = 0.95)
+```
+
+
+## A Look at the Maps
+
+Interestingly, the map shows the multivariate outlier quite clearly despite not showing it in the permanova setting. 
+
+```{r cmd_outlier}
+#plot the CMD with the outlier
+
+cmd1 <- cmdscale(dist(nfl_fin), 2) %>% as_tibble(.name_repair = "unique")
+names(cmd1) <- c("X","Y")
+cmd1$Index <- 1:nrow(cmd1)
+
+
+ggplot(cmd1, aes(X,Y)) + geom_label(aes(label = Index)) + theme_bw() + ggtitle("Outlier")
+
+
+
+```
+
+
+
+The t-SNE, on the other hand, doesn't do show the outlier as clearly, even when run at different levels of perplexity (I tried 5, 10, and 20). The map starts to look more like a uniform spread of points as you get higher on the perplexity scale. 
+
+```{r tsne_outlier}
+rt1 <- Rtsne(dist(nfl_fin), pca = FALSE, is_distance = TRUE, perplexity = 5)
+
+df1 <- tibble("X" = rt1$Y[,1], "Y" = rt1$Y[,2])
+df1$Index = 1:nrow(df1)
+
+ggplot(df1, aes(X,Y, label = Index)) + geom_label() + ggtitle("T-SNE: Perplexity = 5")
+
+
+```
+
+
+
+
+# Simulated Datasets
+
+Starting with a simulated dataset, we assess the effect of influential points on the MDS and t-SNE maps. The data are simulated using multivariate normal distributions with 3 distinct groups, and then 3 outliers that are pushed, on average, 5 standard deviations from the mean for each of the 10 simulated dimensions. 
+
+
+A quick plot of the simulated data is given below: 
+
+```{r simulations}
+set.seed(34536)
+g1 <- rmnorm(n = 10, mean = rep(20, 10), diag(25, 10)) %>%
+  t() %>%
+  data.frame()
+g2 <- rmnorm(n = 10, mean = rep(50, 20), diag(25, 20)) %>%
+  t() %>%
+  data.frame()
+g3 <- rmnorm(n = 10, mean = rep(80, 30), diag(25, 30)) %>%
+  t() %>%
+  data.frame()
+
+
+yes_structure <- rbind(g1, g2, g3) %>%
+  data.frame() %>%
+  mutate(Group = c(rep("1", 10), rep("2", 20), rep("3", 30)))
+
+yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+
+## adds outliers in the last 3 indices (simulating from normal based on 5 sd's from mean)
+add_outliers <- rbind(rnorm(10, 5, .5), rnorm(10, 5, .5), rnorm(10, 5, .5)) %>% as_tibble()
+names(add_outliers) <- names(yes_structure_scale)
+
+
+yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",3))
+
+
+yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In")
+
+```
+
+
+
+Similar to the NFL dataset, we step through the Permanova process in the chunk below: 
+
+```{r sourceoutlierfuctions}
+source("OutlierCompFunctions.R")
+x3 <- MultiPermanova(yes_structure_final[,1:10])
+
+```
+
+
+The t-SNE maps do not appear to be affected by the outlier observations. 
+
+```{r tsne_sims, include = TRUE}
+## test: 
+
+df2 = tibble(Holdout = 1:length(x3$tsnelist), PValues = sapply(x3$tsnelist, pullPval))
+df2$Colors <- ifelse(df2$PValues < 0.05, "tomato2", "blue4")
+ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
+
+
+which(df2$PValues < 0.05)
+```
+
+
+On the other hand, the MDS maps are quite sensitive to the outlying three observations, all of which have relatively small p-values (before doing any multiple-testing corrections). 
+
+```{r mds_sims, include = TRUE }
+df2 = tibble(Holdout = 1:length(x3$cmdlist), PValues = sapply(x3$cmdlist, pullPval))
+df2$Colors <- ifelse(df2$PValues < 0.05, "tomato2", "blue4")
+ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("MDS: P-Values From Adonis")
+
+
+which(df2$PValues < 0.05)
+```
+
+
+
+We can ramp up the complexity of the simulations in several ways: 
+
++ Increased/Decreased sample size (note that larger sample sizes slow this process down)
++ More/less  variability in groups
++ More/fewer groups
++ Increase/Decrease the size of the outliers
+
+Note that in **all** simulations I've tried as of now, the t-SNE results have not so much as yielded a spurious small p-value for the t-SNE maps. 
+
+
+
+
+
+# Penguins 
+
+The following example goes through the same method with the penguins dataset from the Palmer Penguins dataset (Horst et al, 2000). Size measurements, for various parts of penguins are considered, although this analysis focuses specifically on four: Bill length, Bill depth, Flipper length, and body mass (grams). 
+
+We step through the permanova process and also ramp up the number of iterations to 5000 per permutation to generate a more granular set of p-values. Some changes to the steps that we took are listed below: 
+
++ Standardize first, then create an outlier (in particular, this is done to make t-SNE more sensitive)
++ Try a "Godzilla-sized" Penguin that is more than 5 or 6 standard deviations away if a relatively large outlier doesn't work
+
+
+Note that this dataset is larger than the previous one and therefore takes longer to compile. 
+
+
+```{r, include = TRUE, eval = TRUE}
+library(palmerpenguins)
+data(penguins) #Loads both penguins and penguins_raw
+library(tidyverse)
+library(janitor)
+penguins_raw <- penguins_raw %>%
+      clean_names() #Another way to clean up variable names with spaces etc. from janitor
+
+penguins <- penguins_raw %>%
+      dplyr::rename (
+         bill_length = culmen_length_mm,
+         bill_depth = culmen_depth_mm,
+         flipper_length = flipper_length_mm
+         ) %>%
+      mutate (
+         species = word (species, 1), #Just first word
+         study_name = factor(study_name),
+         species = factor(species),
+         individual_id = factor(individual_id)
+         ) 
+
+penguinsX <- penguins %>% mutate(NameID = interaction(species,island,sex, sample_number)) %>% 
+   dplyr::select(bill_length, bill_depth, flipper_length, body_mass_g, delta_15_n_o_oo, delta_13_c_o_oo, NameID, species)
+
+penguinsX2 <- penguinsX %>% drop_na()
+#rownames(penguinsX2) <- penguinsX2$NameID
+```
+
+
+## Visualizing Penguin Data
+
+We take the approach of first selecting four features from the penguin dataset: Bill length, bill depth, flipper length, and body mass. 
+
+
+
+```{r, eval = TRUE}
+
+penguins_s <- penguinsX2 %>% select(bill_length, bill_depth, flipper_length, body_mass_g)
+
+set.seed(2521)
+
+## Scales the data with robust scaling passing centerfun = median and mean abs dev as scale fxn
+library(robustHD) #standardize function
+#penguin2 <-  penguins_s %>% lapply(standardize, centerFun = median, scaleFun = mad) %>% as_tibble()
+
+
+## we actually don't need the robust standardization function here, will add outlier after scaling
+penguin2 <- penguins_s %>% lapply(scale) %>% as_tibble()
+
+
+## Adds outlier Penguin
+penguin2[nrow(penguin2) + 1,] <- list(5,6,5,6) # should add values on a 5 or 6 standard deviation scale away
+```
+
+```{r, eval = FALSE}
+## Optional: Godzilla Penguin
+penguin2[nrow(penguin2) + 1, ] <- list(100,99,100,99) #ginormous penguin
+
+```
+
+
+```{r plotpenguins, eval = TRUE}
+#dataset for plot
+penguin2p <- penguin2
+penguin2p$Species <- c(penguinsX2$species,"Outlier")
+
+## globalminmax shouldn't do any scaling but it does something weird here
+ggparcoord(as.matrix(penguin2p), columns = 1:4, group = 5, scale = 'globalminmax') + ggtitle("Pengunin Data") + theme_bw()
+
+## 
+penguin2p$ID <- 1:nrow(penguin2p)
+penguin2p %>% pivot_longer(1:4) %>% ggplot(aes(name, value, group = ID,color = Species)) + geom_line() + ggtitle("Penguin Data with Outlier Added In")
+
+```
+
+
+
+
+
+
+The code chunk below generates the t-SNE maps and classical MDS. In the t-SNE here, we stick with the original number of iterations. 
+
+```{r, eval = TRUE}
+data = penguin2 
+maplist <- list()
+  cmdlist <- list()
+perp = 20
+
+ #generate maps on holdout data
+  for(j in 1:nrow(data)){
+    
+    #hold out a single row of the data (in the jth row)
+    #note - have to remove, as t-SNE doesn't like NAs
+    data_holdout <- data[-j,]
+    
+    #calculate distances FIRST
+    data_dist <- dist(data_holdout)
+    
+    #generate the classical MDS
+    mds1 <- cmdscale(data_dist, k = 2)
+    cmdlist[[j]] <- mds1
+    
+    #generate the t-SNE map and store x,y in map list
+    x <- Rtsne(data_dist, perplexity = perp, pca = FALSE, is_distance = TRUE)
+    maplist[[j]] <- x$Y
+  }
+```
+
+
+Code chunk below inserts NAs into each holdout index, as above. Then vectorizes distances and builds a single dataframe/tibble for each. 
+
+```{r, eval = TRUE}
+ # Insert NAs into the holdout indices
+  maplist_new <- list()
+  cmdlist_new <- list()
+  
+  for(j in 1:length(maplist)){
+    #create temporary vectors with NAs for each of the XY coordinates
+    tempX <- insert(maplist[[j]][,1], j, NA)
+    tempY <- insert(maplist[[j]][,2], j, NA)
+    
+    tempcmdX <- insert(cmdlist[[j]][,1], j, NA)
+    tempcmdY <- insert(cmdlist[[j]][,2], j, NA)
+    
+    maplist_new[[j]] <- tibble(X = tempX, Y = tempY)
+    cmdlist_new[[j]] <- tibble(X = tempcmdX, Y = tempcmdY)
+  }
+  
+  #vectorizes the distances and outputs a list of vectorized distance matrices 
+  dist_list <- lapply(maplist_new, vectorize_dist)
+  dist_list_cmd <- lapply(cmdlist_new, vectorize_dist)
+  
+  
+  
+  ## takes the vectorized distance matrices and smashes them into a single data frame - to build correlation matrix
+  
+  dist_mat <- dist_list %>% as_tibble(.name_repair = "minimal")
+  dist_mat_cmd <- dist_list_cmd %>% as_tibble(.name_repair = "minimal")
+```
+
+Next steps: Generates the correlation matrices using pairwise complete observations. Then generates distance matrices from them. 
+
+```{r, eval = TRUE, cache = TRUE}
+ cormat <- cor(dist_mat, use = "pairwise.complete.obs", method = "pearson")
+  cormat %>% dim()
+  
+  
+  cormat_cmd <- cor(dist_mat_cmd, use = "pairwise.complete.obs", method = "pearson")
+  cormat_cmd %>% dim()
+  
+  
+  ##generate distance on correlation matrix
+  cordist <- sqrt(2*(1-cormat)) %>% as.dist()
+  cordist_cmd <- sqrt(2*(1-cormat_cmd)) %>% as.dist()
+  
+  model_list <- list()
+  model_list_cmd <- list()
+```
+
+Finally, we run through the Adonis piece to get each of the individual tests. A 'significant' p-value should indicate evidence that the map is suitably different from the other maps, meaning that if we have a really large outlier, we should be able to identify it. 
+
+```{r, eval = TRUE, cache = TRUE}
+
+nperms = 10000
+ #Step through the permanova
+for(j in 1: nrow(as.matrix(cordist))){
+  #generate the indicator variable for each feature
+  indicator_df <- rep(0, nrow(maplist_new[[1]])) %>% as.data.frame()
+  indicator_df_cmd <- rep(0, nrow(cmdlist_new[[1]])) %>% as.data.frame()
+  
+  names(indicator_df) <- names(indicator_df_cmd) <- "Indicator"
+  indicator_df$Indicator[j] = 1
+  indicator_df_cmd$Indicator[j] = 1
+  
+  #each item in the list is an Adonis test using the indicator for the holdout variable
+  model_list[[j]] <- adonis(cordist ~ Indicator, data = indicator_df, permutations = nperms)
+  model_list_cmd[[j]] <- adonis(cordist_cmd ~ Indicator, data = indicator_df_cmd, permutations = nperms)
+}
+
+
+
+
+```
+
+
+
+Visualize TSNE: 
+
+```{r, eval = TRUE}
+df2 = tibble(Holdout = 1:length(model_list), PValues = sapply(model_list, pullPval))
+df2$Colors <- ifelse(df2$PValues < 0.05, "tomato2", "blue4")
+ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
+
+
+which(df2$PValues < 0.05)
+```
+
+
+
+Visualize CMDS: 
+```{r, eval = TRUE}
+df3 = tibble(Holdout = 1:length(model_list_cmd), Pvalues = sapply(model_list_cmd, pullPval))
+df3$Colors <- ifelse(df3$Pvalues < 0.05, "Significant", "Not-Significant")
+ggplot(df3, aes(Holdout, Pvalues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+
+which(df3$Pvalues < 0.05)
+
+```
+
+
+Visualize the PCP
+```{r, eval = TRUE}
+
+x <- penguin2p %>% mutate(Pvalues = df3$Pvalues, PvalColors = df3$Colors) %>% pivot_longer(1:4) 
+
+#generate plot
+ggplot(x, aes(name, value, group = ID,shape = factor(Species), color = factor(PvalColors))) + geom_line() + ggtitle("Penguin Data with Outlier Added In")
+
+
+#look at tabular view
+table(x$Species, x$PvalColors)
+
+```
+
+
+
+
+
+
+

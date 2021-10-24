@@ -1,0 +1,154 @@
+---
+title: "Simulation Study with Feature Contribution"
+author: "Paul Harmon"
+date: "9/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+source("OutlierCompNew.R")
+library(ggplot2)
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(magrittr)
+library(knitr)
+library(Rtsne)
+library(robustHD)
+library(GGally)
+library(stringr)
+library(plotly)
+library(R.utils)
+library(vegan)
+library(mnormt)
+
+```
+
+
+# Introduction
+
+This doc looks at a profile where we have aberrant values only on a few of the features. Can we detect? 
+
+```{r, echo = FALSE, eval = TRUE}
+
+n_sims = 100
+
+#create a bunch of lists to store stuff later
+plot_data_list <- list()
+plot_tsne_results_list <- list()
+plot_mds_results_list <- list()
+plot_tsne_fstat_results_list <- list()
+plot_mds_fstat_results_list <- list()
+results_list <- list()
+results_list_cmd <- list()
+df3list = df2list = list()
+
+```
+
+
+
+## Profile
+
+
+Let's look at a couple example profiles - here we might have a feature with only a few weird values. 
+
+
+
+```{r sims_v2, eval = TRUE, cache = TRUE, warning = FALSE, message = FALSE}
+
+  
+  #### Simulate the Data with outliers and a single group (simulates all from one group with mean 40)
+  
+  g1 <- rmnorm(n = 20, mean = rep(40, 10), diag(45, 10)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 20, mean = rep(40, 20), diag(45, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 20, mean = rep(40, 30), diag(45, 30)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 10), rep("2", 20), rep("3", 30)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:20], scale) %>% as_tibble()
+  
+  ### adds outlier - where it's roughly the same for all but 2 of the features
+  add_outliers <- c(rnorm(18, 0, 1), c(-5,5))
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:20) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+  datplot
+  
+
+
+```
+
+
+```{r}
+perplexity = 10
+
+ xTSNE <- MultiPermanova(yes_structure_final[,1:20], maptype = "tSNE")
+#  results_list[[j]] <- xTSNE
+  
+  df2 = tibble(Holdout = 1:length(xTSNE$modellist), PValues = sapply(xTSNE$modellist, pullPval), Fstat = sapply(xTSNE$modellist, pullFstat))
+  df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
+  df2list[[j]] = df2
+```
+
+
+
+
+```{r}
+perplexity = 10
+  #### Run the Permanova mapping (for t-SNE)
+  
+  xTSNE <- MultiPermanova(yes_structure_final[,1:20], maptype = "tSNE")
+  results_list[[j]] <- xTSNE
+  
+  df2 = tibble(Holdout = 1:length(xTSNE$modellist), PValues = sapply(xTSNE$modellist, pullPval), Fstat = sapply(xTSNE$modellist, pullFstat))
+  df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
+  df2list[[j]] = df2
+  
+  #### TSNE Plots########################################################
+  #Visualize the results and store in a list
+  sigplot <- ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
+  plot_tsne_results_list[[j]] <- sigplot
+  
+  #Visualize the f stats and store in a list
+  sigplotf <- ggplot(df2, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: F Stats From Adonis")
+  plot_tsne_fstat_results_list[[j]] <- sigplotf
+  
+  
+  
+   #### Run the Permanova mapping (for MDS)
+  
+   xCMD <- MultiPermanova(yes_structure_final[,1:10], maptype = "MDS")
+  results_list_cmd[[j]] <- xCMD
+  
+  ### CMD Plots #########################################################
+  
+  df3 = tibble(Holdout = 1:length(xCMD$modellist), PValues = sapply(xCMD$modellist, pullPval), Fstat = sapply(xCMD$modellist, pullFstat))
+    df3$Colors <- ifelse(df3$PValues < 0.05, TRUE, FALSE)
+  df3list[[j]] = df3
+  
+  
+  #Visualize the results and store in a list
+  sigplot2 <- ggplot(df3, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
+  plot_mds_results_list[[j]] <- sigplot2
+  
+  #Visualize the f stats and store in a list
+  sigplot2f <- ggplot(df3, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: F Stats From Adonis")
+  plot_mds_fstat_results_list[[j]] <- sigplot2f
