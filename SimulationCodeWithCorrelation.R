@@ -1,5 +1,5 @@
 ## Simulation Script
-## October 5, 2021
+## October 24, 2021
 
 ## Paul Harmon
 
@@ -213,8 +213,8 @@ mean(cni2)
 #### SAVE OUTPUT ####
 
 #saves the output tables with p-values and F-stats (we can make plots from this)
-saveRDS(df2list, paste0(Sys.Date(), "_simulationCorrelated_tsne_list.RDS"))
-saveRDS(df3list, paste0(Sys.Date(), "_simulationCorrelated_mds_list.RDS"))
+saveRDS(df2list, paste0(Sys.Date(), "_simulationCorrelated_tsne_list2.RDS"))
+saveRDS(df3list, paste0(Sys.Date(), "_simulationCorrelated_mds_list2.RDS"))
 
 
 
