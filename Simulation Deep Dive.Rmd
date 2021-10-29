@@ -465,7 +465,22 @@ kable(temp)
 
 
 
+# Correlated Single Group
 
+I instead took a different approach to simulating correlated features; although in this case, I did not vary the group means so we end up with a correlated, single group simulation in this setting. 
+
+## Data
+
+```{r}
+
+```
+
+
+## Results 
+
+```{r}
+
+```
 
 
 
