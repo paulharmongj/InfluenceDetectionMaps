@@ -25,6 +25,7 @@ library(plotly)
 library(R.utils)
 library(vegan)
 library(mnormt)
+library(MASS)
 
 
 
@@ -75,9 +76,12 @@ Pending Scenarios:
 + Influence on only a subset of features
 
 
-# Multiple Groups
+# Multiple Groups - Uncorrelated
 
 ## Data
+
+
+The first section considers an influential point that bounces around within the variation of the three groups.  The means are different across the groups but there is no correlation between the 10 features simulated. 
 
 ```{r}
 g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
@@ -137,16 +141,19 @@ cni2 <- sapply(df3list, correctNonInfluence)
 
 
 #mean detection rates
-mean(ci1)
-mean(cni1)
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(mean(ci1), mean(cni1))
+MDS <- c(mean(ci2), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
 
-mean(ci2)
-mean(cni2)
+kable(temp)
 
 
 ```
 
-# Larger 
+# Larger - Uncorrelated
+
+In this setting, we examine a case where the influential point is larger than the rest of the data. The data are still simulated in multiple groups. 
 
 ## Data 
 
@@ -208,17 +215,20 @@ cni2 <- sapply(df3list, correctNonInfluence)
 
 
 #mean detection rates
-mean(ci1)
-mean(cni1)
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(mean(ci1), round(mean(cni1),3))
+MDS <- c(mean(ci2), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
 
-mean(ci2)
-mean(cni2)
+kable(temp)
 
 
 ```
 
 
-# Smaller
+# Smaller - Uncorrelated
+
+This setting should be quite similar to the results that we see in the larger influential point as the point is simply "flipped" to be several standard deviations smaller across the 10 features in the data. 
 
 ## Data 
 
@@ -279,20 +289,21 @@ cni1 <- sapply(df2list, correctNonInfluence)
 ci2 <- sapply(df3list, correctInfluence)
 cni2 <- sapply(df3list, correctNonInfluence)
 
-
 #mean detection rates
-mean(ci1)
-mean(cni1)
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(mean(ci1), round(mean(cni1),3))
+MDS <- c(mean(ci2), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
 
-mean(ci2)
-mean(cni2)
+kable(temp)
+
 
 
 ```
 
 
 
-# No Outliers
+# No Outliers - Uncorrelated Data 
 
 ## Data 
 ```{r}
@@ -329,8 +340,8 @@ datplot
 ```{r}
 #2021-10-18_simulationsmaller_mds_list
 
-mds1 <- readRDS("2021-10-19_simulationNone_mds_list.RDS")
-tsne1 <- readRDS("2021-10-19_simulationNone_tsne_list.RDS")
+mds1 <- readRDS("2021-10-20_simulationNoInfluence_mds_list.RDS")
+tsne1 <- readRDS("2021-10-20_simulationNoInfluence_tsne_list.RDS")
 
 
 
@@ -341,21 +352,114 @@ df3list  <- mds1
 
 #t-SNE
 ci1 <- sapply(df2list, spuriousInfluence)
-cni1 <- 1-cni1
+cni1 <- 1-ci1
 
 
 #MDS
 ci2 <- sapply(df3list, spuriousInfluence)
-cni2 <- 1 - cni2
+cni2 <- 1 - ci2
 
 
 #mean detection rates
-mean(ci1)
-mean(cni1)
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
+MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
 
-mean(ci2)
-mean(cni2)
+kable(temp)
 
+
+
+```
+
+
+
+
+# Correlated Data 
+
+
+## Data
+
+```{r}
+n <- 10
+  Sigma <- rWishart(1,n,diag(1,n)) %>% matrix(nrow = n, ncol = 10)
+  diag(Sigma) <- 35
+  
+  
+  g1 <- mvrnorm(n = 20, mu = rep(20, 10), Sigma)  %>%
+    data.frame()
+  g2 <- mvrnorm(n = 20, mu = rep(40, 10), Sigma) %>%
+    data.frame()
+  g3 <- mvrnorm(n = 20, mu = rep(60, 10), Sigma) %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  add_outliers <- rbind(rnorm(10, 0, 1)) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+  datplot
+  
+```
+
+A heatmap of the variance-covariance matrix used to simulate the data is shown below. The correlations shift a little during the simulations because of the inverse-Wishart distribution used to generate the Sigma matrix at each round, but there are very few extreme correlations present - just some association between the features. 
+
+```{r}
+image(Sigma, main = "Variance-Covariance Matrix of Features")
+
+kable(Sigma)
+```
+
+
+
+
+
+## Results 
+
+**Results are pending** - simulation results are based on fewer runs. 
+
+```{r}
+
+tsne1 <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-10-24_simulationCorrelated_tsne_list2.RDS")
+mds1 <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-10-24_simulationCorrelated_mds_list2.RDS")
+
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+
+#mean detection rates
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
+MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
+
+kable(temp)
 
 ```
 
@@ -366,7 +470,13 @@ mean(cni2)
 
 
 
-# One Group
+
+
+
+
+
+
+# APPENDIX: ONE GROUP, THREE OUTLIERS
 
 ## Data
 
