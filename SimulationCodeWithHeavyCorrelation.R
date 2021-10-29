@@ -66,32 +66,19 @@ for(j in 1:n_sims){
   
   
   ## Simulates from standard normal distribution
-  init = matrix(0, nrow = 100, ncol = 10)
-  snorms = apply(init, 2, rnorm, n = 100)
+  init = matrix(0, nrow = 60, ncol = 10)
+  snorms = apply(init, 2, rnorm, n = 60)
   
   varcov = diag(10) #initializes variance covariance
   
   # want to correlate feature 1 with features 2, 3, 4 
-  varcov[1,2] <- varcov[2,1] <- 
-  varcov[1,3] <- varcov[3,1] <- 
-  varcov[1,4] <- varcov[4,1] <- 
+  varcov[1,2] <- varcov[2,1] <- 0.9
+  varcov[1,3] <- varcov[3,1] <- 0.75
+  varcov[1,4] <- varcov[4,1] <- 0.6
   
+  yes_structure <- snorms %*% varcov
   
-  ## different approach - use Wishart distributions to simulate positive definite Sigma matrices
-  # n <- 10
-  # Sigma <- rWishart(1,n,diag(1,n)) %>% matrix(nrow = n, ncol = 10)
-  # diag(Sigma) <- 35
-  # 
-  # 
-  # g1 <- mvrnorm(n = 20, mu = rep(20, 10), Sigma)  %>%
-  #   data.frame()
-  # g2 <- mvrnorm(n = 20, mu = rep(40, 10), Sigma) %>%
-  #   data.frame()
-  # g3 <- mvrnorm(n = 20, mu = rep(60, 10), Sigma) %>%
-  #   data.frame()
-  # 
-  
-  yes_structure <- rbind(g1, g2, g3) %>%
+  yes_structure <- yes_structure %>%
     data.frame() %>%
     mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
   
@@ -107,7 +94,9 @@ for(j in 1:n_sims){
   
   ##### Visualize the data and store in a list
   datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
-  datplot
+  #datplot
+  
+  #cor(yes_structure_final[,1:10]) %>% corrplot("number")
   
   plot_data_list[[j]] <- datplot
  
@@ -205,8 +194,8 @@ mean(cni2)
 #### SAVE OUTPUT ####
 
 #saves the output tables with p-values and F-stats (we can make plots from this)
-saveRDS(df2list, paste0(Sys.Date(), "_simulationCorrelated_tsne_list2.RDS"))
-saveRDS(df3list, paste0(Sys.Date(), "_simulationCorrelated_mds_list2.RDS"))
+saveRDS(df2list, paste0(Sys.Date(), "_simulationStrongCorrelated_tsne_list2.RDS"))
+saveRDS(df3list, paste0(Sys.Date(), "_simulationStrongCorrelated_mds_list2.RDS"))
 
 
 
