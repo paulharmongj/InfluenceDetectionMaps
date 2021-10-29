@@ -432,8 +432,8 @@ kable(Sigma)
 
 ```{r}
 
-tsne1 <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-10-24_simulationCorrelated_tsne_list2.RDS")
-mds1 <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-10-24_simulationCorrelated_mds_list2.RDS")
+tsne1 <- readRDS("2021-10-29_simulationCorrelated_tsne_list2.RDS")
+mds1 <- readRDS("2021-10-29_simulationCorrelated_mds_list2.RDS")
 
 
 
