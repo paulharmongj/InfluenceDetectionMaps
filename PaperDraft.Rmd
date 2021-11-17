@@ -27,6 +27,21 @@ library(plotly)
 library(R.utils)
 library(vegan)
 library(mnormt)
+
+
+correctInfluence = function(result_df){
+  tmp <- tail(result_df,1)
+  det_rate <- length(which(tmp$PValues <= 0.05))/nrow(tmp)
+  return(det_rate)}
+
+# Correctly Identified Non-Influential
+#head(df3list[[1]], 60)
+
+correctNonInfluence = function(result_df){
+  tmp <- head(result_df,60)
+  det_rate <- length(which(tmp$PValues > 0.05))/nrow(tmp)
+  return(det_rate)}
+
 ```
 
 
@@ -108,19 +123,6 @@ $$ D_i = \frac{\sum_{j=1}^{n} (\hat{y_j} - \hat{y}_{j(-i)})^2}{ps^2}$$
 Although Cook's distance is essentially an F statistic from an $F_{p, n-p}$ distribution, and the method does not use p-values to determine how "influential" a point is. Rather, cutoff values are typically assessed, or observations with relatively large Cook's distance values are considered for investigation of influence. 
 
 
-```{r, eval = FALSE}
-#image of an influential point
-x = rnorm(100, 10, 3)
-y = 3 + 2*x + rnorm(100, 0, 1)
-
-lm1 = lm(y~x)
-par(mfrow = c(2,2))
-plot(lm1)
-
-
-```
-
-
 
 
 ## Outliers and Influential Points in Maps
@@ -173,7 +175,164 @@ We will discuss correcting p-values for multiple testing later, although current
 
 We conducted a series of simulations to assess the efficacy of the method at identifying influential points in various different situations. In all cases, we simulated data from multivariate normal distributions.  Additionally, we did not use any of the data pre-processing available in any t-SNE maps; no PCA was used to pick an initial set of dimensions to reduce. 
 
-In the simulation, each iteration simulates a new (contaminated) dataset, runs the t-SNE and MDS mapping procedure, and tests the consistency of the configurations for each of the *n* holdout points. Several versions of the simulations were assessed, including 1) 1 group with 3 "influental" points, 2) simulation with 3 groups with 3 "influential" points with different variances, and 3) simulation with 3 groups with 3 influential points with same variances. 
+In the simulation, each iteration simulates a new dataset, runs the t-SNE and/or MDS mapping procedure, and tests the consistency of the configurations for each of the *n* holdout points. Several versions of the simulations were assessed, including the following scenarios: 
+
++ 1. Single influential point bouncing between 3 groups
++ 2. Large or Small influential point (3 groups)
++ 3. No influential points
++ 4. Highly correlated data with 3 group means
++ 5. Single Influential point on varying number of covariates
+
+
+In the most basic simulation, we consider 60 observations simulated from a multivariate normal distribution with three distinct groups. The data are simulated to be uncorrelated, and the resulting data is standardized so that overall, the resulting three-group cloud has mean 0 and standard deviation 1. (Note that because of the way the data are standardized, each group's standard deviation is necessarily less than 1).  An influential point is then simulated with mean 0 and standard deviation 1, indicating that the point can vary across the groups and clearly break the group structure, as shown below: 
+
+```{r, echo = FALSE}
+g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(rnorm(10, 0, 1)) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+The results of the simulation with 100 simulations per ordination type is shown in the table below. The diagnostic method identifies the influential point about 90% of the time when assessing MDS maps, as compared to only 2% of the time when assessing t-SNE maps.  The ineffectiveness of the diagnostic for t-SNE is not overly surprising given that in many of the maps, the influential point ended up near the middle of the map rather than on the periphery, meaning that leaving it out had a neglible effect on the hold-out t-SNE maps. 
+
+In both cases, the rate of spurious detections was very small- i.e., the number of non-influential points that were detected with small p-values (<0.05) was 3.3% for t-SNE and 1.8% for MDS mapping techniques, respectively. It's worth noting that in both cases, we would expect about a 5% spurious detection rate, but it may be that the lack of distinct permutations in the PERMANOVA tests actually leads to a slightly decreased spurious detection rate because very small p-values are difficult to obtain in a relatively small dataset.  
+
+```{r, echo = FALSE}
+mds1 <- readRDS("2021-10-16_simulation1_mds_list.RDS")
+tsne1 <- readRDS("2021-10-16_simulation1_tsne_list.RDS")
+
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+
+#mean detection rates
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(mean(ci1), mean(cni1))
+MDS <- c(mean(ci2), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
+
+kable(temp)
+
+
+```
+
+
+The results for either very large or very small observations (relative to the three groups) are quite similar - but it is interesting to note that the influence diagnostic tool seems to treat these observations differently than it does the influential point that bounces across group means.  An example of a "large" observation is given below. 
+
+```{r, echo = FALSE}
+ g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(rnorm(10, 3, .5)) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+
+In both settings, the power to detect the influential point decreases relative to the observation that breaks group structure. Detection rates for the influential point fall to the 28-31% range for MDS maps, and 1-6% range for t-SNE.  This is again unsurprising in the t-SNE setting because the t-SNE maps tend to place the very large or very small point in the center of the map.  Interestingly, the relative magnitude of the outlying observation tends to be less important than the structural differences, at least when it comes to identifying the influence in MDS maps. 
+
+```{r, echo = FALSE}
+mds1 <- readRDS("2021-10-18_simulationsmaller_mds_list.RDS")
+tsne1 <- readRDS("2021-10-18_simulationsmaller_tsne_list.RDS")
+
+
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, correctInfluence)
+cni1 <- sapply(df2list, correctNonInfluence)
+
+
+#MDS
+ci2 <- sapply(df3list, correctInfluence)
+cni2 <- sapply(df3list, correctNonInfluence)
+
+#mean detection rates
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(mean(ci1), round(mean(cni1),3))
+MDS <- c(mean(ci2), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
+
+kable(temp)
+
+```
+
+
+## Power to Detect Differences
+
+In order to determine a notion of how severe an outlier/influential point might be, we investigated several methods for quantifying the extremeness of an observation in the multivariate or high-dimensional space.  We calculate the Mahalanobis distance for the influential point as compared to the original distribution of multivariate normal points (without regard to the different group labels).
+
+
+
 
 
 
@@ -191,6 +350,17 @@ The PERMANOVA step in the method can use either a pre-specified number of permut
 
 
 # Overview of Real Data Results 
+
+
+## MNIST 
+
+The MNIST dataset...
+
+Goal is to apply the diagnostic to a sample of the MNIST dataset and identify any observations that appear to be highly influential. 
+
+Then, re-examine the images that are surfaced and see how consistent they are across both methods. 
+
+
 
 ## Penguin Data 
 
@@ -215,7 +385,7 @@ The Carnegie Classification is typically based on a scaled version of the data d
 For this analysis, we instead look at scaled versions of the unranked data in part to assess whether or not some of the relative extreme points appear as influential relative to other universities in the group. 
 
 
-```{r, eval = FALSE}
+```{r, eval = FALSE, echo = FALSE}
 CC2015 <- read.csv("https://raw.githubusercontent.com/paulharmongj/Carnegie_SEM/master/data/CC2015data.csv")
 
 CC2015_filter <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) %>% select(PDNFRSTAFF, S.ER.D, NONS.ER.D, FACNUM, HUM_RSD, STEM_RSD, OTHER_RSD, SOCSC_RSD)
