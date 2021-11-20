@@ -23,8 +23,11 @@ for(j in 1:length(sdvec)){
   results_list[[j]] <- list()
   results_list_cmd[[j]] <- list()
   
-  df2list[[j]][[i]] <- list()
-  df3list[[j]][[i]] <- list()
+  df2list[[j]] <- list()
+  df3list[[j]] <- list()
+  
+  mdistlist[[j]] <- list()
+  datplotlist[[j]] <- list()
   
   for(i in 1:n_sims){
   
@@ -60,13 +63,13 @@ for(j in 1:length(sdvec)){
   
   ##### Visualize the data and store in a list
   datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
-  datplotlist[[j]] <- datplot
+  datplotlist[[j]][[i]] <- datplot
   
   
   
   ### Calculate the Mahalanobis Distance
   mdist <- mahalanobis(add_outliers, rep(0,10), diag(10))
-  mdistlist[[j]] <- mdist
+  mdistlist[[j]][[i]] <- mdist
   
   
   ### Now run the simulations and get the detection rate
@@ -91,7 +94,40 @@ for(j in 1:length(sdvec)){
   }
 }
 
+## Functions
+correctInfluence = function(result_df){
+  tmp <- tail(result_df,1)
+  det_rate <- length(which(tmp$PValues <= 0.05))/nrow(tmp)
+  return(det_rate)}
 
+
+#tsne
+df2list
+
+#MDS
+
+#detection rate
+
+
+
+for(j in 1:length(sdvec)){
+  sapply(df3list[[j]], correctInfluence)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Code Appendix ####
 # 
 # sapply(results_list_cmd[[1]][[1]]$modellist, pullPval)
 # sapply(results_list_cmd[[1]][[2]]$modellist, pullPval)

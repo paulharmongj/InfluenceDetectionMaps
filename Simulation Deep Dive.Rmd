@@ -151,6 +151,22 @@ kable(temp)
 
 ```
 
+
+
+## Mahalanobis Distance
+
+
+```{r}
+#for MDS
+
+mahalanobis(rep(0,10), diag(10))
+
+```
+
+
+
+
+
 # Larger - Uncorrelated
 
 In this setting, we examine a case where the influential point is larger than the rest of the data. The data are still simulated in multiple groups. 
