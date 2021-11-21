@@ -175,16 +175,101 @@ We will discuss correcting p-values for multiple testing later, although current
 
 We conducted a series of simulations to assess the efficacy of the method at identifying influential points in various different situations. In all cases, we simulated data from multivariate normal distributions.  Additionally, we did not use any of the data pre-processing available in any t-SNE maps; no PCA was used to pick an initial set of dimensions to reduce. 
 
-In the simulation, each iteration simulates a new dataset, runs the t-SNE and/or MDS mapping procedure, and tests the consistency of the configurations for each of the *n* holdout points. Several versions of the simulations were assessed, including the following scenarios: 
+In the simulation, each iteration simulates a new dataset, runs the t-SNE and/or MDS mapping procedure, and tests the consistency of the configurations for each of the *n* holdout points. Observations can be considered to be influentieal in several ways.  First, a point may be considered influential in the mean structure, indicating that it may bounce between several groups formed by the rest of the data across one or many of the variables simulated.  We consider this case in numerous simulations, and test the impact of observations that differ in mean structure on a single feature ranging to all the features simulated.  
 
-+ 1. Single influential point bouncing between 3 groups
+Additionally, the influential point may be influential in the correlation structure.  In this case, a point may not be visibly different from the rest of the data; however, such an observation might indicate highly correlated measurements on metrics that are not correlated in the rest of the data, or vice-versa. Finally, it is possible that a point could be outlying both in the mean structure and the correlation structure.  We additionally consider this case in simulations below. 
+
+The following scenarios were considered: 
+
++ 1. No influential points
++ 2. Single influential point bouncing between 3 groups
 + 2. Large or Small influential point (3 groups)
-+ 3. No influential points
 + 4. Highly correlated data with 3 group means
 + 5. Single Influential point on varying number of covariates
 
 
-In the most basic simulation, we consider 60 observations simulated from a multivariate normal distribution with three distinct groups. The data are simulated to be uncorrelated, and the resulting data is standardized so that overall, the resulting three-group cloud has mean 0 and standard deviation 1. (Note that because of the way the data are standardized, each group's standard deviation is necessarily less than 1).  An influential point is then simulated with mean 0 and standard deviation 1, indicating that the point can vary across the groups and clearly break the group structure, as shown below: 
+
+## No Outliers 
+
+In the most basic simulation, we consider 60 observations on 10 features, each taken from multivariate normal distributions in three distinct groups.  The data are simulated to be uncorrelated, and the resulting data is standardized so that overall, the resulting three-group cloud has mean 0 and standard deviation 1. (Note that because of the way the data are standardized, each group's standard deviation is necessarily less than 1).  An example of the scenario we consider in the simulation study is shown below: 
+
+```{r}
+ g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### No outliers - only 60 observations in this dataset 
+  
+  yes_structure_final <- yes_structure_scale
+  yes_structure_final$Group <- c(yes_structure$Group)
+  
+  
+  ##### Visualize the data and store in a list
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+datplot
+```
+
+
+We identify similar performance of both mapping methods when there are no true influential points present in the data. As expected, there are some spurious detections - both methods falsely detect influential points at about a 3% rate, less than expected given that we are using an alpha value of 0.05. Given the relatively low percentage of spurious detections, it may not be necessary to consider a multiple testing correction; in particular, a conservative approach like Bonferroni is likely not appropriate as none of the p-values that can be obtained in a dataset with only $n = 60$ observations would be small enough to be deemed significant. 
+
+```{r}
+#2021-10-18_simulationsmaller_mds_list
+
+mds1 <- readRDS("2021-10-20_simulationNoInfluence_mds_list.RDS")
+tsne1 <- readRDS("2021-10-20_simulationNoInfluence_tsne_list.RDS")
+
+spuriousInfluence = function(result_df){
+  tmp <- result_df
+  det_rate <- length(which(result_df$PValues <= 0.05))/nrow(tmp)
+  return(det_rate)}
+
+#### Generate a table of values to assess efficacy of detections -----------------#
+df2list <- tsne1
+df3list  <- mds1
+#note - these will give values per run - so we need to take a look across the simulations
+
+#t-SNE
+ci1 <- sapply(df2list, spuriousInfluence)
+cni1 <- 1-ci1
+
+
+#MDS
+ci2 <- sapply(df3list, spuriousInfluence)
+cni2 <- 1 - ci2
+
+
+#mean detection rates
+Category <- c("Correctly Identified Influential", "Non-Influential")
+TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
+MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
+temp <- cbind(Category,TSNE, MDS)
+
+kable(temp)
+
+
+
+```
+
+
+
+
+
+## Single Influential Points
+
+We retain the same three group structure but add several types of influential points in the following simulation.  In the first, we consider an influential point with mean 0 and standard deviation 1, indicating that the point can vary across the groups and clearly break the group structure across all 10 of the potential covariates. An example observation is shown below.  
 
 ```{r, echo = FALSE}
 g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
