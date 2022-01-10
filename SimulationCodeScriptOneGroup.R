@@ -82,7 +82,7 @@ for(j in 1:n_sims){
   
   #### Run the Permanova mapping (for t-SNE)
   tic = Sys.time()
-  xTSNE <- MultiPermanova(yes_structure_final[,1:10], maptype = "tSNE", perp_val = 20)
+  xTSNE <- MultiPermanova(yes_structure_final[,1:10], maptype = "Sammon", perp_val = 20)
   toc = Sys.time() 
   perf_time[[j]] <- toc - tic
   
@@ -174,7 +174,7 @@ mean(cni2)
 ##
 
 #saves the output tables with p-values and F-stats (we can make plots from this)
-saveRDS(df2list, paste0(Sys.Date(), "_simulationNone_tsne_list.RDS"))
+saveRDS(df2list, paste0(Sys.Date(), "_simulationNone_sammon_list.RDS"))
 saveRDS(df3list, paste0(Sys.Date(), "_simulationNone_mds_list.RDS"))
 
 

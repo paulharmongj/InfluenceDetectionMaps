@@ -160,7 +160,7 @@ correctInfluence = function(result_df){
 #head(df3list[[1]], 60)
 
 correctNonInfluence = function(result_df){
-  tmp <- head(result_df,60)
+  tmp <- head(result_df,100)
   det_rate <- length(which(tmp$PValues > 0.05))/nrow(tmp)
   return(det_rate)}
 #### Generate a table of values to assess efficacy of detections -----------------#

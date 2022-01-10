@@ -44,6 +44,9 @@ Generate_Holdout_Maps <- function(data, j, maptype = "MDS", perp_val = 10){
     #generate the t-SNE map and store x,y in map list
     map <- Rtsne(data_dist, perplexity = perp_val, pca = pca_options, is_distance = TRUE)$Y
   }
+  else if (maptype %in% c("Sammon","sammon")){
+    map <- sammon(data_dist, y = cmdscale(data_dist,2), k =2)$points #initialized with cmdscale
+  }
   else{print("No maptype selected.")}
   
   

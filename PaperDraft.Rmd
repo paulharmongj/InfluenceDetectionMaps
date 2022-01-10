@@ -1,7 +1,7 @@
 ---
 title: "Formal Paper Draft"
 author: "Paul Harmon"
-date: "8/21/2021"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   pdf_document: default
   html_document: default
@@ -72,16 +72,19 @@ The method centers on calculation of a balance between two similarity metrics. T
 
 A good representation of the high-dimensional space should mean that $p_{ij}$ and $q_{ij}$ look reasonably similar to each other; since these are both simply joint probabilities, the objective function of t-SNE is simply a symmetricized Kullbeck-Leibler divergence between the two, defined below: 
 
-$$C = \sum_{i} \sum_{j} p_{j|i} log(\frac{p_{j|i}}{q_{j|i}})$$ 
+$$Cost = \sum_{i} \sum_{j} p_{j|i} log(\frac{p_{j|i}}{q_{j|i}})$$ 
 
-t-SNE is an improvement over Stochastic Neightbor Embedding (SNE), which makes use of Gaussian distributions to model both $p_{ij}$ and $q_{ij}$ make preserving local structure somewhat difficult. Most of the minimization of objective functions is done via gradient descent (and some methods require simulated annealing because the algorithm can get caught in local optima). Critically, because the optimization is non-convex, and as a consequence of the gradient descent methods used to optimize it, t-SNE has the potential to provide different maps when run on the same data at the same perplexity. 
+t-SNE is an improvement over Stochastic Neighbor Embedding (SNE), which makes use of Gaussian distributions to model both $p_{ij}$ and $q_{ij}$.  The use of a light-tailed distribution for the lower dimension leads to a phenomenon known as the "crowding problem" where the 2-dimensional map cannot accommodate many neighbors in high dimensions (Van der Maaten, 2011). By utilizing a t-distribution for the $q_{ij}$, t-SNE better preserves the local structure of the data. Most of the minimization of objective functions is done via gradient descent (and some methods require simulated annealing because the algorithm can get caught in local optima). Critically, because the optimization is non-convex, and as a consequence of the gradient descent methods used to optimize it, t-SNE has the potential to provide different maps when run on the same data at the same perplexity. 
 
 
 ### Reduction of Initial Dimensionality with PCA
 
-Additionally, t-SNE is subject to a pre-processing step involving principal component analysis (PCA).  In most implementations, "whitening" via PCA is performed on the initial dataset (or input distance matrix) to reduce the dimensionality to a reasonable value.  For instance, in Van der Maaten's initial paper, several examples reduced the initial dimensionality of the datato 30 for computational gains (Van der maaten, 2011). 
+Additionally, t-SNE is subject to a pre-processing step involving principal component analysis (PCA).  In most implementations, "whitening" via PCA is performed on the initial dataset (or input distance matrix) to reduce the dimensionality to a reasonable value.  For instance, in Van der Maaten's initial paper, several examples reduced the initial dimensionality of the data to 30 for computational gains (Van der maaten, 2011). 
 
 Depending on the size of the initial dimensionality of the data, this step may drastically reduce the number of dimensions that t-SNE needs to deal with.  However, it has some potential to impact the resulting ordination, particularly if the number of initial dimensions kept is relatively low or PCA does not do a great job of fitting the original dataset. At best, the t-SNE mapping is only as good as the initial PCA is.  For the simulations shown in this paper, no whitening was performed, and the original distance matrix was passed to t-SNE directly. 
+
+Campell, Caudle and Hoover (2019) explored different methods than PCA as an intermediate dimensionality reduction step in t-SNE. They compared PCA, Independent Component Analysis (ICA), Linear Discriminant Analysis (LDA), Sammon Mapping, and Locally Linear Embedding (LLA) as preliminary steps in t-SNE and found that resulting maps tended to form different groupings with variation in separation.  While we did not consider assessing the impact of different intermediate dimensionality reduction techniques in this analysis, it does present an interesting route for additional research.  
+
 
 
 
@@ -102,30 +105,32 @@ Classical MDS can be expressed equivalently as Principal Component Analysis when
 
 ## Additional Mapping Techniques 
 
-Placeholder section in case we want to add another mapping technique in. 
+While the focus of this paper is on t-SNE and MDS, there are manifold additional methods for generating lower-dimensional representations of high-dimensional data.  We include some additional methods that were either compared directly with t-SNE in Van der Maaten and Hinton's original paper (2008) or because they represent the cutting edge of high-dimensional data visualiztion tools.  They range in terms of complexity, with some adding relatively minor changes to the MDS structure to those that share similarities with other branches of mathematics, such as topology or topoligical data analysis.  Sammon Mapping is a non-linear version of classical scaling which scales the stress metric by the pairwise distances, attempting to better maintain local structure by equalizing the impact of large and small distances (Sammon, 1969).  The objective function for Sammon mapping is as follows, where $y_i$ and $y_j$ are the ith and jth points in the lower-dimensional representation and $d_{ij}$ represents the Euclidean distance between points $x_i$ and $x_j$ in the high-dimensional space: 
 
-+ SNE
-+ Sammon Mapping
-+ Isomap
+$$\phi(Y) = \frac{1}{\sum_{ij}d_{ij}}\sum_{ij}\frac{(d_{ij}^2 - ||y_i-y_j||^2)}{d_{ij}}$$
+Isomap similarly extends MDS to be more flexible, and is a non-linear reduction technique (Tenenbaum et al., 2000). It was initially used as a comparison for t-SNE by van der Maaten (2011) and is utilized as a comparison mapping technique here as well. 
+
+Stochastic Neighbor Embedding, or SNE, was a precursor to t-SNE and relies on gaussian distributions rather than the t-distrubution specified previously.  It is subject to a problem known as "crowding" which led to the development of t-SNE. It is worth noting that SNE need not be based on symmetricized KL-divergences, as t-SNE is. 
+
+Finally, UMAP is a modern competitor for t-SNE that is based topological data science techniques; chiefly, a model of a Riemannian manifold used to approximate the data (McInnes and Healy, 2018). 
+
 
 
 # Defining “Influence” in High Dimensional Maps
 
 ## Influence in Regression - Cook’s Distance
 
-In regression models, an outlier is typically denoted as a point that is either much larger or smaller than similar observations on a specific scale. However, an outlier need not be an influential point. An influential point simply needs to be outlying enough relative to similar observations that it impacts the fit of the regression line. the identification of influential points that can impact the results of a model is commonplace.  
+Belsley, Kuh and Welsch define influential points as a data point “which, either individually or together with several other observations, has demonstrably larger impact on the calculated values of various estimates (coefficients, standard errors, t-values, etc.) than is the case for most of the other observations.”(1980 page 11).  In regression modeling, as in most statistical methods, care must be taken to properly distinguish between an outlier and a so-called influential point.  An outlier is typically denoted as a point that is either much larger or smaller than similar observations on a specific scale. However, an outlier may not necessarily be influential; a truly influential point must be outlying enough relative to similar observations that it impacts the fit of the regression line. The identification of influential points that can impact the results of a model is commonplace and has been the subject of substantial research for regression-based methods.  
 
 Cook (1977) proposed a measure of influence called "Cook's Distance" that has since become one of the most common tools for diagnosing influential points and outliers. The idea is predicated on the concept that by leaving an out an influential observation, the results of the model should change. This process of jackknifing observations is done for all the observations in the data. 
 
 Cook's distance is defined as follows for the $ith$ observed data point, with$\hat{j}_{j}$ the fitted response value for the model withthe $ith$ observation omitted, $s^2$ defined as the mean-squared error for the model and $p$ the number of variables for each observation: 
 $$ D_i = \frac{\sum_{j=1}^{n} (\hat{y_j} - \hat{y}_{j(-i)})^2}{ps^2}$$ 
 
-Although Cook's distance is essentially an F statistic from an $F_{p, n-p}$ distribution, and the method does not use p-values to determine how "influential" a point is. Rather, cutoff values are typically assessed, or observations with relatively large Cook's distance values are considered for investigation of influence. 
+Although Cook's distance is essentially an F statistic from an $F_{p, n-p}$ distribution, and the method does not use p-values to determine how "influential" a point is. Rather, the F-statistics themselves are typically compared to cutoff values, or observations with relatively large Cook's distance values are considered for investigation of influence. 
 
 
-
-
-## Outliers and Influential Points in Maps
+## Identifying Outliers in Maps
 
 Similar to a regression setting, the resulting maps produced by ordination methods like MDS, t-SNE and the like can be impacted by the inclusion or exclusion of points. In short, an "influential" point in a lower dimensional mapping can be defined as one that, when excluded, drives meaningful differences in the ordination method that lead to a different shaped map as compared to when that point is included. An outlier, on the other hand, might look different in the high-dimensional space (or on a subset of features), but would not meaningfully change the shape of the map when left out.  
 
@@ -135,8 +140,35 @@ Much of the literature around robustness of mapping results and multivariate out
 
 These edges $d1, d2, d3$ can then be used to form triangles - in general, outliers tend to *break* the triangle inequality and inliers tend to satisfy it. They recommend a rule to examine the histogram H of $b$, the number of edges of broken triangles, and generate a threshold $\phi$ that is intended to identify inliers vs. outliers. 
 
-
 Two other papers, including Forrero and Giannakis (2012) as well as Kong et al. (2019) frame the problem in a slightly different way. They consider a penalized *stress* metric for optimization, utilizing regularization to better identify outlier points.  In both cases, they are able to identify outliers using a majorization-minimization procedure that iteratively produce more outlier-robust maps of the lower-dimensional embedding of interest. 
+
+Alternatively, archetypal analysis (Cutler & Breiman, 1994) can be used to identify outlying points in a multivariate space.  The method approximates a convex hull that lies around the boundary of a dataset based on "archetype" points; these extreme points have been used to identify potential multivariate outliers (Catherine's PhD dissertation).  While this method may be effective at identifying and categorizing extreme points on the boundary of the multivariate space, it does not necessarily answer the question of how the inclusion/exclusion of those points might change the shape of a lower-dimensional representation.  This is the problem we seek to answer with our method. 
+
+
+## Permutational Multivariate Analysis of Variance
+
+Although the previous methods give rise to identifying extreme points, they do not clearly inform the influence of a given observation on the resulting shape of the ordination.  Since the goal of this research is to identify a method for identifying and quantifying influential observations in ordination problems, our goal is to extend the ideas that underlie Cook's Distance from a regression framework to a multivariate response framework.  This necessitates the use of distance matrices rather than raw observations, and requires the use of multivariate Analysis of Variance methods to generate something similar to a F-statistic. 
+
+Permutational Multivariate Analysis of Variance (PERMANOVA) is a tool for allows for partitioning variation across multivariate data (Anderson, 2017) in other words, it allows for generalization of ANOVA-type tools on multivariate datasets.  Much like some of the multivariate extensions of ANOVA, PERMANOVA allows for testing of differences in means while taking into account the correlation structures between variables. 
+
+A critical difference between some of the standard tools for performing MANOVA and PERMANOVA is that the latter method does makes no assumption of multivariate normality. It only requires an assumption of exchangability between  Instead, PERMANOVA relies on the use of permutation tests to generate a pseudo-F test statistic. In a similar vein as ANOVA, PERMANOVA requires the calculation of among-group sum of squares (SSA) and residual within-group sum of squares (SSW).  The total sum of squares is calculated as follows: 
+
+$$SS_T =  \sum_{i = 1}^{N-1} \sum_{j = i+1}^{N} \frac{d_{ij}^2}{N}$$ 
+Partitioning can be obtained via subtraction of the residual sum of squares $SS_W$ from the total sum of squares (as in ANOVA), which is defined as the sum of each of the groups' squared distances between the observed data and the group centroid, as defined below for the $l^{th}$ group and $g$ is total of number of groups present in the data: 
+
+$$SS_w = \sum_{l = 1}^{g} W_l$$ 
+The $W_l$ is thus defined as follows, with $n_l$ defined as the the group sample size (such that $\sum_{l=1}^{g}l_g = N$) and where $\epsilon^{[l]}$ is a binary indicator between the ith and jth samples that equals 1 when samples are in the lth group and 0 otherwise: 
+
+$$W_l = \sum_{i = 1}^{N-1} \sum_{j =(i +1)}^{N}\epsilon_{ij}^{l} \frac{d_{ij}^2}{n_l} $$ 
+
+
+The resulting partitioning of $SS_T - SS_W$ allows for calculation of a pseudo F-test statistic (which is a multivariate analogue for a standard F ratio).  This tests the null hypothesis that there are no differences in the positions of the group centroids in the distance matrices is as follows, where N is the number of observations and g is the number of columns in the design matrix: 
+
+$$F = \frac{SS_A}{SS_R}*(\frac{N-g}{g-1}) $$ 
+
+P-values are then obtained in a typical permutation-based method, meaning that they are directly calculated based on the number of observed permutations that are more extreme than a given result.  For the purposes of this paper, all PERMANOVA models were performed using the R package 'vegan' (Oskanen, et al). 
+
+
 
 
 
@@ -148,14 +180,14 @@ Similar to Cook's Distance, we propose calculating hold-out maps, with each of t
 
 In general, we seek to identify either **multivariate outliers** (or groups of them) which, for some reason, cause large differences in the shape of the resulting ordination. The methods rely on a few different ideas.  First, PERMANOVA (Anderson, 2001) is a non-parametric, multivariate version of Analysis of Variance (ANOVA) that relies on a pseduo-F test to compare within-group and between group similarities based on a specified distance (dissimilarity) measure. Unlike ANOVA, PERMANOVA makes use of permutation tests to draw inferences without assuming distributions of test statistics. 
 
-Second, distance matrices contain information on point-to-point distances (or dissimilarities) and, when vectorized, the correlation of the distance matrices measures similarity of two configurations (Mantel's test (Mantel, 1967) makes use of this approach to assess correlation between distance matrices). 
+Second, distance matrices contain information on point-to-point distances (or dissimilarities) and, when vectorized, the correlation of the distance matrices measures similarity of two configurations Mantel's test (Mantel, 1967) makes use of this approach to assess correlation between distance matrices; in this case, we simply compare the similarities in the different resulting map distances. 
 
-Third, correlations (or similarities) can be converted to distances; one such metric for doing this is $\sqrt{2(1-r_{ij})}$ (James et al, 2013) where $r_{ij}$ is the correlation between $x_i$ and $x_j$. 
+Third, similarities (or correlations) can be converted to distances; one such metric for doing this is $\sqrt{2(1-r_{ij})}$ (James et al, 2013) where $r_{ij}$ is the correlation between $x_i$ and $x_j$. 
 
 Finally, correlations can be computed using pairwise complete observations to leverage all available information to estimate correlations in the presence of some missing data values. 
 
 
-Our Permanova-based approach is as follows: 
+Then, we utilize PERMANOVA to assess the statistical significance of the differences in our resulting distance matrices. Note that while Anderson (2017) points out PERMANOVA is less robust than its competitors to choice of dissimilarity, this is not of importance for our method as we utilize only Euclidean distance measures in this step.  Our PERMANOVA-based approach is as follows: 
 
 1. For each observation in the dataset, remove it, and generate a map in 2 dimensions from the resulting (n-1) observations for a selected ordination method.  (For accounting purposes, it may make sense to keep the nx1 structure but replace the holdout observation with NA). 
 2. Generate a distance matrix of the nx1 by 2 matrix. Do this for each of the held-out observations. 
@@ -166,7 +198,19 @@ Our Permanova-based approach is as follows:
 + $H_0$: No differences in map with observation j removed vs. those without j removed 
 + $H_a$: Some difference in map with observation j removed
 
-We will discuss correcting p-values for multiple testing later, although currently our plan is to assess using Benjamini-Hochberg False Discovery Rate or Bonferroni corrections (or something similar, assuming that the results are based on p-values as in the Bonferroni Outlier test (Cook & Weisberg, 1982)). We would expect that if the maps are suitably distorted, or *influenced* by a single point, the resulting p-value for the jth adonis test would be small. 
+Correcting p-values for multiple testing may or may not be necessary depending on how the p-values are intended to be used, although we recommend using Benjamini-Hochberg False Discovery Rate over more conservative Bonferroni corrections (or something similar, assuming that the results are based on p-values as in the Bonferroni Outlier test (Cook & Weisberg, 1982)). We would expect that if the maps are suitably distorted, or *influenced* by a single point, the resulting p-value for the jth PERMANOVA test would be small if the sample sizes are large enough, and quite often will be the smallest p-value generated. 
+
+
+## Generation of P-Values
+
+In a typical PERMANOVA model, the number of permutations that could be generated from a covariate could be quite large, given that in most cases the majority of the values of the covariate may be nonzero.  However, because of the structure of the method presented here, the predictor variable is always a vector with a single indicator 1 in the holdout index and 0's in all of the remaining indices. Thus, there are only n possible permutations for the predictor variable in the PERMANOVA model. 
+
+The p-value for each test is then directly calculated as the number of observations that could be more extreme than a given observation, meaning that a lower bound on the p-value is $1/n$; roughly, the set of obtainable p-values would then be directly calculated as $\frac{k}{n}$ where $k$, an integer value between 1 and $n$, refers to the number of cases that are more extreme than the observed result. 
+
+In some cases, it may make sense to consider a multiple testing correction for the p-values generated, considering that there are $n$ tests being performed (one for each holdout).  In large data settings, it may be feasible to use such methods to control for the rate of spurious detections; however, in small data settings this may be impractical.  Indeed, in a very small data setting, assuming a typical $\alpha = 0.05$, if $n< 20$, it would be impossible to obtain a p-value of significance at all! 
+
+The p-values can instead be construed as providing a sorting of the observations based on their relative extreme-ness.  It stands to reason that, much in the way that Cook's Distance uses F-statistics to identify abberant observations, the pseudo-F statistic or sorted p-value can be compared based solely on relative magnitude. In a setting where only a single influential point is present, we would expect to see that influential point have the smallest p-value (or, equivalently, the largest pseudo-F statistic) of those obtained. 
+
 
 
 
@@ -193,7 +237,7 @@ The following scenarios were considered:
 
 In the most basic simulation, we consider 60 observations on 10 features, each taken from multivariate normal distributions in three distinct groups.  The data are simulated to be uncorrelated, and the resulting data is standardized so that overall, the resulting three-group cloud has mean 0 and standard deviation 1. (Note that because of the way the data are standardized, each group's standard deviation is necessarily less than 1).  An example of the scenario we consider in the simulation study is shown below: 
 
-```{r}
+```{r, echo = FALSE}
  g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
     t() %>%
     data.frame()
@@ -225,7 +269,7 @@ datplot
 
 We identify similar performance of both mapping methods when there are no true influential points present in the data. As expected, there are some spurious detections - both methods falsely detect influential points at about a 3% rate, less than expected given that we are using an alpha value of 0.05. Given the relatively low percentage of spurious detections, it may not be necessary to consider a multiple testing correction; in particular, a conservative approach like Bonferroni is likely not appropriate as none of the p-values that can be obtained in a dataset with only $n = 60$ observations would be small enough to be deemed significant. 
 
-```{r}
+```{r, echo = FALSE}
 #2021-10-18_simulationsmaller_mds_list
 
 mds1 <- readRDS("2021-10-20_simulationNoInfluence_mds_list.RDS")
@@ -252,14 +296,14 @@ cni2 <- 1 - ci2
 
 
 #mean detection rates
-Category <- c("Correctly Identified Influential", "Non-Influential")
+Category <- c("Correctly Identified Influential", "Correctly Non-Identified Non-Influential")
 TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
 MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
-temp <- cbind(Category,TSNE, MDS)
-
+Isomap <- c("","")
+Sammon <- c("","")
+temp <-rbind(Category,TSNE, MDS, Isomap, Sammon)
+colnames(temp) <- Category
 kable(temp)
-
-
 
 ```
 
@@ -331,11 +375,13 @@ cni2 <- sapply(df3list, correctNonInfluence)
 
 
 #mean detection rates
-Category <- c("Correctly Identified Influential", "Non-Influential")
-TSNE <- c(mean(ci1), mean(cni1))
-MDS <- c(mean(ci2), round(mean(cni2),3))
-temp <- cbind(Category,TSNE, MDS)
-
+Category <- c("Correctly Identified Influential", "Correctly Non-Identified Non-Influential")
+TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
+MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
+Isomap <- c("","")
+Sammon <- c("","")
+temp <-rbind(TSNE, MDS, Isomap, Sammon)
+colnames(temp) <- Category
 kable(temp)
 
 
@@ -402,11 +448,14 @@ ci2 <- sapply(df3list, correctInfluence)
 cni2 <- sapply(df3list, correctNonInfluence)
 
 #mean detection rates
-Category <- c("Correctly Identified Influential", "Non-Influential")
-TSNE <- c(mean(ci1), round(mean(cni1),3))
-MDS <- c(mean(ci2), round(mean(cni2),3))
-temp <- cbind(Category,TSNE, MDS)
-
+#mean detection rates
+Category <- c("Correctly Identified Influential", "Correctly Non-Identified Non-Influential")
+TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
+MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
+Isomap <- c("","")
+Sammon <- c("","")
+temp <-rbind(Category,TSNE, MDS, Isomap, Sammon)
+colnames(temp) <- Category
 kable(temp)
 
 ```
@@ -414,10 +463,55 @@ kable(temp)
 
 ## Power to Detect Differences
 
-In order to determine a notion of how severe an outlier/influential point might be, we investigated several methods for quantifying the extremeness of an observation in the multivariate or high-dimensional space.  We calculate the Mahalanobis distance for the influential point as compared to the original distribution of multivariate normal points (without regard to the different group labels).
+In order to determine a notion of how severe an outlier/influential point might be, we investigated several methods for quantifying the extremeness of an observation in the multivariate or high-dimensional space.  We calculate the Mahalanobis distance (Mahalanobis, 1936)  for the influential point as compared to the original distribution of multivariate normal points (without regard to the different group labels).
+
+Given a vector $\vec{x}$ with p elements,the Mahalanobis distance is calculated as follows, given mean $mu$ and covariance matrix $\Sigma$: 
+
+$$D^2 = (\vec{x} - \mu)^t \Sigma^{-1} (\vec{x} - \mu) $$
+The mahalanobis distance can be calculated across each of the simulated datasets and compared to get a sense for how the efficacy of the PERMANOVA-based method changes when influential points are only mildly outlying compared to very extreme points. *Ideally, we would see detection rates that are substantively larger when assessing influential points that have a larger mahalanobis distance than those that have a smaller mahalanobis distance.  This allows for us to assess a power curve to determine how the method is able to detect differences of different magnitudes. *
+
+```{r}
+#show plot with number of features on X axis and detection rate on y axis
+
+plot(c(1,2,3,4,5), c(.5,.6,.7,.9,.9), xlab = "# Features", ylab = "Detection Rate", type = "l", main = "Placeholder For Power Curve")
+```
 
 
 
+## Sparsity of Influential Features
+
+The number of features on which an observation is anomolous is potentially an additional critical element, and can impact how the method detects influence.  Per the previous simulation set up, we simulated observations from the central group with means that differed on a single feature.  We then increased the number of features that differed from the central group mean up to $p-1 = 9$ features to see how the method would detect differences based on influential points that are only influential on a small number of covariates. 
+
+```{r}
+#show plot with number of features on X axis and detection rate on y axis
+
+df3list <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-11-21_SparsitySimulation_mds_list.RDS")
+
+TF <- matrix(TRUE, nrow = length(df3list[[1]]), ncol = length(df3list))
+templist <- list()
+
+for (i in 1:(length(df3list)-1)){
+  
+  temp <- rep(TRUE, 100)
+  ## Identification Rate at given K
+  for(j in 1:length(df3list[[1]])){
+    temp[j] <- tail(df3list[[i]][[j]]$PValues,1)<0.05
+    
+  }
+  TF[,i] <- temp
+  templist[[i]] <- sum(temp)/100
+  
+}
+
+
+plot(x = c(1,2,3,4), y = unlist(templist), type = "l", xlab = "Number of Points In Different Mean Group", ylab = "Detection Rate")
+points(x = c(1,2,3,4), y = unlist(templist), pch = 20)
+title("Detection Rates By Sparsity of Outlier - MDS")
+```
+
+
+
+In truly high dimensional data, it is possible that an observation may only differ substantively on a small number (say 1 or 2) of features in a dataset with potentially thousands of dimensions.  The computational cost of PERMANOVA on such a large dataset would be expensive in such a case. 
 
 
 
@@ -499,10 +593,21 @@ Much like in regression, we recommend taking an iterative approach to dealing wi
 We recommend identifying the observation with the largest pseudo-F statistic, removing it, and re-assessing the PERMANOVA results with the reduced set.  By cleaning out some of the most influential points, the resulting maps should be more reproducible, of higher fidelity, and provide potentially more meaningful results. 
 
 
+## Future Work
 
-## Key Questions to Answer
+There are several considerations for future work that might be worth considering.  Based on the differences in t-SNE maps produced by Campell, Caudle and Hoover (2019), an exploration of the impact of different intermediate dimensionality reduction step in t-SNE could be interesting.  It is certainly possible that using PCA as an intermediate method for reducing the data dimensionality prior to t-SNE, or choosing a different dimension reduction technique, could either enhance or hamper the ability of this PERMANOVA-based method to identify influential points. 
 
-Is there a way to look at the individual contribution of each feature to the influential points? (simulate this?)
+For several of these methods, we initially examined metrics that assess the individual contribution of each feature to the cost function for specific mapping techniques.  Interestingly, for t-SNE, the individual costs contributions for the points that were simulated as influential were relatively small, and observations that had high individual cost were often not obviously outlying in the maps created.  Some additional research into the dynamics of individual cost contributions - and how tightly these tie to the resulting changes in ordinations when points are included/excluded from maps - could provide an interesting avenue for future work. 
+
+
+Additionally, examining additional mapping techniques may be worthwhile as well. While this paper assesses a linear method for doing dimension reduction (Classical MDS) and a non-linear method (t-SNE), there exists a bevy of other methods that might be worth examining, including UMAP, Sammon Mapping, Isomap, and others.
+
+
+
+
+
+
+
 
 
 
