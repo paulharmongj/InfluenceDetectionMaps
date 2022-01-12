@@ -363,14 +363,17 @@ The results of the simulation with 100 simulations per ordination type is shown 
 In both cases, the rate of spurious detections was very small- i.e., the number of non-influential points that were detected with small p-values (<0.05) was 3.3% for t-SNE and 1.8% for MDS mapping techniques, respectively. It's worth noting that in both cases, we would expect about a 5% spurious detection rate, but it may be that the lack of distinct permutations in the PERMANOVA tests actually leads to a slightly decreased spurious detection rate because very small p-values are difficult to obtain in a relatively small dataset.  
 
 ```{r, echo = FALSE}
-mds1 <- readRDS("2021-10-16_simulation1_mds_list.RDS")
+#mds1 <- readRDS("2021-10-16_simulation1_mds_list.RDS")
+mds1 <- readRDS("2022-01-12_simulation1_mds_list.RDS")
 tsne1 <- readRDS("2021-10-16_simulation1_tsne_list.RDS")
+sammon1 <- readRDS("2022-01-12_simulation1_Sammon_list.RDS")
 
 
 
 #### Generate a table of values to assess efficacy of detections -----------------#
 df2list <- tsne1
 df3list  <- mds1
+df4list <- sammon1
 #note - these will give values per run - so we need to take a look across the simulations
 
 #t-SNE
@@ -383,12 +386,18 @@ ci2 <- sapply(df3list, correctInfluence)
 cni2 <- sapply(df3list, correctNonInfluence)
 
 
+#sammon
+ci3 <- sapply(df4list, correctInfluence)
+cni3 <- sapply(df4list, correctNonInfluence)
+
+
+
 #mean detection rates
 Category <- c("Correctly Identified Influential", "Correctly Non-Identified Non-Influential")
 TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
 MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
 Isomap <- c("","")
-Sammon <- c("","")
+Sammon <- c(round(mean(ci3),3), round(mean(cni3),3))
 temp <-rbind(TSNE, MDS, Isomap, Sammon)
 colnames(temp) <- Category
 kable(temp)
@@ -477,7 +486,7 @@ In order to determine a notion of how severe an outlier/influential point might 
 Given a vector $\vec{x}$ with p elements,the Mahalanobis distance is calculated as follows, given mean $mu$ and covariance matrix $\Sigma$: 
 
 $$D^2 = (\vec{x} - \mu)^t \Sigma^{-1} (\vec{x} - \mu) $$
-The mahalanobis distance can be calculated across each of the simulated datasets and compared to get a sense for how the efficacy of the PERMANOVA-based method changes when influential points are only mildly outlying compared to very extreme points. *Ideally, we would see detection rates that are substantively larger when assessing influential points that have a larger mahalanobis distance than those that have a smaller mahalanobis distance.  This allows for us to assess a power curve to determine how the method is able to detect differences of different magnitudes. *
+The mahalanobis distance can be calculated across each of the simulated datasets and compared to get a sense for how the efficacy of the PERMANOVA-based method changes when influential points are only mildly outlying compared to very extreme points. *Ideally, we would see detection rates that are substantively larger when assessing influential points that have a larger mahalanobis distance than those that have a smaller Mahalanobis distance.  This allows for us to assess a power curve to determine how the method is able to detect differences of different magnitudes. *
 
 ```{r}
 #show plot with number of features on X axis and detection rate on y axis
