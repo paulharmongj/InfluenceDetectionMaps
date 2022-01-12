@@ -36,7 +36,7 @@ sammon(d, y = cmdscale(d,2), k =2)
 
 #isomap
 
-isomap(dist = d, ndim = 2, k = )
+isomap(dist = d, ndim = 2, k = 100, fragmentedOK = TRUE)
 
 #umap
 custom.config = umap.defaults

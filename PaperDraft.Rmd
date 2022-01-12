@@ -276,6 +276,7 @@ We identify similar performance of both mapping methods when there are no true i
 
 mds1 <- readRDS("2021-10-20_simulationNoInfluence_mds_list.RDS")
 tsne1 <- readRDS("2021-10-20_simulationNoInfluence_tsne_list.RDS")
+sammon1 <- readRDS("2022-01-11_simulationNoInfluence_Sammon_list.RDS")
 
 spuriousInfluence = function(result_df){
   tmp <- result_df
@@ -285,6 +286,7 @@ spuriousInfluence = function(result_df){
 #### Generate a table of values to assess efficacy of detections -----------------#
 df2list <- tsne1
 df3list  <- mds1
+df4list <- sammon1
 #note - these will give values per run - so we need to take a look across the simulations
 
 #t-SNE
@@ -296,13 +298,18 @@ cni1 <- 1-ci1
 ci2 <- sapply(df3list, spuriousInfluence)
 cni2 <- 1 - ci2
 
+#Sammon
+ci3 <- sapply(df4list, spuriousInfluence)
+cni3 <- 1 - ci3
+
+
 
 #mean detection rates
 Category <- c("Correctly Identified Influential", "Correctly Non-Identified Non-Influential")
 TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
 MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
 Isomap <- c("","")
-Sammon <- c("","")
+Sammon <- c(round(mean(ci3),3),round(mean(cni2),3))
 temp <-rbind(Category,TSNE, MDS, Isomap, Sammon)
 colnames(temp) <- Category
 kable(temp)

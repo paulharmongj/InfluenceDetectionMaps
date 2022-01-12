@@ -85,7 +85,7 @@ for(j in 1:n_sims){
   
   #### Run the Permanova mapping (for t-SNE)
   tic = Sys.time()
-  xTSNE <- MultiPermanova(yes_structure_final[,1:10], maptype = "tSNE", perp_val = 20)
+  xTSNE <- MultiPermanova(yes_structure_final[,1:10], maptype = "Sammon")
   toc = Sys.time() 
   perf_time[[j]] <- toc - tic
   
@@ -96,7 +96,7 @@ for(j in 1:n_sims){
   df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
   df2list[[j]] = df2
   
-  #### TSNE Plots########################################################
+  #### Sammon Plots########################################################
   #Visualize the results and store in a list
   sigplot <- ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
   plot_tsne_results_list[[j]] <- sigplot
@@ -176,7 +176,7 @@ mean(cni2)
 ##
 
 #saves the output tables with p-values and F-stats (we can make plots from this)
-saveRDS(df2list, paste0(Sys.Date(), "_simulationNoInfluence_tsne_list.RDS"))
+saveRDS(df2list, paste0(Sys.Date(), "_simulationNoInfluence_Sammon_list.RDS"))
 saveRDS(df3list, paste0(Sys.Date(), "_simulationNoInfluence_mds_list.RDS"))
 
 
