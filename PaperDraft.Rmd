@@ -198,7 +198,7 @@ Then, we utilize PERMANOVA to assess the statistical significance of the differe
 + $H_0$: No differences in map with observation j removed vs. those without j removed 
 + $H_a$: Some difference in map with observation j removed
 
-Correcting p-values for multiple testing may or may not be necessary depending on how the p-values are intended to be used, although we recommend using Benjamini-Hochberg False Discovery Rate over more conservative Bonferroni corrections (or something similar, assuming that the results are based on p-values as in the Bonferroni Outlier test (Cook & Weisberg, 1982)). We would expect that if the maps are suitably distorted, or *influenced* by a single point, the resulting p-value for the jth PERMANOVA test would be small if the sample sizes are large enough, and quite often will be the smallest p-value generated. 
+
 
 
 ## Generation of P-Values
@@ -209,7 +209,9 @@ The p-value for each test is then directly calculated as the number of observati
 
 In some cases, it may make sense to consider a multiple testing correction for the p-values generated, considering that there are $n$ tests being performed (one for each holdout).  In large data settings, it may be feasible to use such methods to control for the rate of spurious detections; however, in small data settings this may be impractical.  Indeed, in a very small data setting, assuming a typical $\alpha = 0.05$, if $n< 20$, it would be impossible to obtain a p-value of significance at all! 
 
-The p-values can instead be construed as providing a sorting of the observations based on their relative extreme-ness.  It stands to reason that, much in the way that Cook's Distance uses F-statistics to identify abberant observations, the pseudo-F statistic or sorted p-value can be compared based solely on relative magnitude. In a setting where only a single influential point is present, we would expect to see that influential point have the smallest p-value (or, equivalently, the largest pseudo-F statistic) of those obtained. 
+We recommend using Benjamini-Hochberg False Discovery Rate (or something similar, assuming that the results are based on p-values as in the Bonferroni Outlier test (Cook & Weisberg, 1982)).  A more conservative approach, such as a Bonferroni correction, would require a significance level to be divided by the number of simultaneous tests performed, $N$, meaning that a Bonferroni-based approach would yield a significance threshold of $\alpha^* = \frac{\alpha}{N}$ which is at least as small as the smallest p-value that is possible to obtain.  
+
+Instead, it may make more sense to use the p-values based on their rank regardless of their statistical significance. The p-values can instead be construed as providing a sorting of the observations based on their relative extreme-ness.  It stands to reason that, much in the way that Cook's Distance uses F-statistics to identify abberant observations, the pseudo-F statistic or sorted p-value can be compared based solely on relative magnitude. In a setting where only a single influential point is present, we would expect to see that influential point have the smallest p-value (or, equivalently, the largest pseudo-F statistic) of those obtained. 
 
 
 
