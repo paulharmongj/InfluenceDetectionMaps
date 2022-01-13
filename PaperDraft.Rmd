@@ -446,14 +446,17 @@ datplot
 In both settings, the power to detect the influential point decreases relative to the observation that breaks group structure. Detection rates for the influential point fall to the 28-31% range for MDS maps, and 1-6% range for t-SNE.  This is again unsurprising in the t-SNE setting because the t-SNE maps tend to place the very large or very small point in the center of the map.  Interestingly, the relative magnitude of the outlying observation tends to be less important than the structural differences, at least when it comes to identifying the influence in MDS maps. 
 
 ```{r, echo = FALSE}
-mds1 <- readRDS("2021-10-18_simulationsmaller_mds_list.RDS")
-tsne1 <- readRDS("2021-10-18_simulationsmaller_tsne_list.RDS")
+#mds1 <- readRDS("2021-10-17_simulationlarger_mds_list.RDS")
+mds1 <- readRDS("2022-01-12_simulationlarger_mds_list.RDS")
+tsne1 <- readRDS("2021-10-17_simulationlarger_tsne_list.RDS")
+sammon1 <- readRDS("2022-01-12_simulationlarger_Sammon_list.RDS")
 
 
 
 #### Generate a table of values to assess efficacy of detections -----------------#
 df2list <- tsne1
 df3list  <- mds1
+df4list <- sammon1
 #note - these will give values per run - so we need to take a look across the simulations
 
 #t-SNE
@@ -465,13 +468,19 @@ cni1 <- sapply(df2list, correctNonInfluence)
 ci2 <- sapply(df3list, correctInfluence)
 cni2 <- sapply(df3list, correctNonInfluence)
 
+#MDS
+ci3 <- sapply(df4list, correctInfluence)
+cni3 <- sapply(df4list, correctNonInfluence)
+
+
+
 #mean detection rates
 #mean detection rates
 Category <- c("Correctly Identified Influential", "Correctly Non-Identified Non-Influential")
 TSNE <- c(round(mean(ci1),3), round(mean(cni1),3))
 MDS <- c(round(mean(ci2),3), round(mean(cni2),3))
 Isomap <- c("","")
-Sammon <- c("","")
+Sammon <- c(round(mean(ci3),3), round(mean(cni3),3))
 temp <-rbind(Category,TSNE, MDS, Isomap, Sammon)
 colnames(temp) <- Category
 kable(temp)
@@ -577,9 +586,38 @@ Additionally, we simulated an additional penguin that stands out significantly f
 
 The Carnegie Classification (CC) is a method for classifying institutions of higher education based on several metrics of institutional productivity.  The 2015 version of CC was based on data ranging from doctorates awarded in STEM, Non-STEM, Humanities, Social Sciences, and Other (professional) fields, as well as research expenditures in STEM and Non-STEM fields and two proxies for institutional size (tenurable faculty headcount and research faculty headcount). 
 
-The Carnegie Classification is typically based on a scaled version of the data due to the presence of outlier institutions on several metrics.  In particular, some institutions spend a great deal of expenditures on research compared to others, so the actual CC is based on two indices generated using Principal Component Analysis on the ranked data (Cite Harmon, Kosar). 
+The Carnegie Classification is typically based on a ranked set of institutional features due to the presence of outlier institutions on several metrics.  In particular, some institutions spend a great deal of expenditures on research compared to others, so the actual CC is based on two indices generated using Principal Component Analysis on the ranked data (Harmon, et al 2018; Kosar and Scott, 2017). This has a similar effect on the results as to a log transform or standardization process (Kosar and Scott, 2017). 
 
-For this analysis, we instead look at scaled versions of the unranked data in part to assess whether or not some of the relative extreme points appear as influential relative to other universities in the group. 
+```{r, eval = FALSE, echo = FALSE}
+CC2015 <- read.csv("https://raw.githubusercontent.com/paulharmongj/Carnegie_SEM/master/data/CC2015data.csv")
+
+CC2015_filter <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) %>% dplyr::select(PDNFRSTAFF, S.ER.D, NONS.ER.D, FACNUM, HUM_RSD, STEM_RSD, OTHER_RSD, SOCSC_RSD)
+#perplexity = 30
+
+#include a plot of the 2015 Carnegie Classification
+
+
+Rank <- c(1:5)
+Name <- rep("Name", 5)
+
+kable(cbind(Rank, Name), col.names = c("", "MDS"))
+
+```
+
+Initially, we investigate scaled versions of the unranked data in part to assess whether or not some of the relative extreme points appear as influential relative to other universities in the group.  Interestingly, even with some scaling performed, we see that for MDS, the institutions that are surfaced as "influential" are those that seem to fit the bill of being different from the average profile.  The institution with the largest F statistic is Harvard University, followed by: 
+
+**INSERT A PCP of the institutions identified as significant**
+
+
+
+
+### Without Scaling or Ranking
+
+Without scaling or ranking the data at all, the results look even more interesting. 
+
+
+
+
 
 
 ```{r, eval = FALSE, echo = FALSE}
@@ -589,11 +627,10 @@ CC2015_filter <- CC2015 %>% filter(BASIC2015 %in% c(15,16,17)) %>% select(PDNFRS
 perplexity = 30
 
 ## NEED TO STANDARDIZE THE DATA FIRST (MAKE UNITLESS)
-CCscale <- CC2015_filter %>% lapply(scale) %>% as_tibble()
+#CCscale <- CC2015_filter %>% lapply(scale) %>% as_tibble()
 
-out <- MultiPermanova(CCscale, maptype = "MDS")
+#out <- MultiPermanova(CCscale, maptype = "MDS")
 ```
-
 
 
 

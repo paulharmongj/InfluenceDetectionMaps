@@ -28,6 +28,7 @@ library(plotly)
 library(R.utils)
 library(vegan)
 library(mnormt)
+library(MASS)
 
 
 
@@ -185,7 +186,7 @@ mean(cni2)
 ##
 
 #saves the output tables with p-values and F-stats (we can make plots from this)
-saveRDS(df2list, paste0(Sys.Date(), "_simulationlarger_tsne_list.RDS"))
+saveRDS(df2list, paste0(Sys.Date(), "_simulationlarger_Sammon_list.RDS"))
 saveRDS(df3list, paste0(Sys.Date(), "_simulationlarger_mds_list.RDS"))
 
 
