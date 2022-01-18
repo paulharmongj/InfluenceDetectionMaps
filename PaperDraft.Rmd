@@ -264,7 +264,8 @@ In the most basic simulation, we consider 60 observations on 10 features, each t
   
   
   ##### Visualize the data and store in a list
-  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% mutate(name = factor(name, levels = c(paste0("X",1:10)))) %>%
+    ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
 datplot
 ```
 
@@ -354,7 +355,8 @@ g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
   
   
   ##### Visualize the data and store in a list
-  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% mutate(name = factor(name, levels = c(paste0("X",1:10)))) %>%
+    ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
 datplot
 ```
 
@@ -438,7 +440,7 @@ The results for either very large or very small observations (relative to the th
   
   
   ##### Visualize the data and store in a list
-  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
+  datplot <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% mutate(name = factor(name, levels = c(paste0("X",1:10)))) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Simulated Data with Outliers Added In") + guides(alpha = FALSE)
 datplot
 ```
 
@@ -507,51 +509,147 @@ plot(c(1,2,3,4,5), c(.5,.6,.7,.9,.9), xlab = "# Features", ylab = "Detection Rat
 
 ## Sparsity of Influential Features
 
-The number of features on which an observation is anomolous is potentially an additional critical element, and can impact how the method detects influence.  Per the previous simulation set up, we simulated observations from the central group with means that differed on a single feature.  We then increased the number of features that differed from the central group mean up to $p-1 = 9$ features to see how the method would detect differences based on influential points that are only influential on a small number of covariates. 
+The number of features on which an observation is anomolous is potentially an additional critical element, and can impact how the method detects influence.  Per the previous simulation set up, we simulated observations from the central group with means that differed on a single feature.  We then increased the number of features that differed from the central group mean up to $p-1 = 9$ features to see how the method would detect differences based on influential points that are only influential on a small number of covariates. In the example below, an observation may appear to be a member of one group on all but one observation; however, that can be increased to multiple features. 
 
-```{r}
-#show plot with number of features on X axis and detection rate on y axis
-
-df3list <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-11-21_SparsitySimulation_mds_list.RDS")
-
-TF <- matrix(TRUE, nrow = length(df3list[[1]]), ncol = length(df3list))
-templist <- list()
-
-for (i in 1:(length(df3list)-1)){
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(ggpubr)
+k = 1
+g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
   
-  temp <- rep(TRUE, 100)
-  ## Identification Rate at given K
-  for(j in 1:length(df3list[[1]])){
-    temp[j] <- tail(df3list[[i]][[j]]$PValues,1)<0.05
-    
-  }
-  TF[,i] <- temp
-  templist[[i]] <- sum(temp)/100
   
-}
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(c(rnorm(k, 1.5, .2), rnorm(10-k, 0, .3))) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot1 <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>% mutate(name = factor(name, levels = c(paste0("X",1:10)))) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("Single Influential Dimension") + guides(alpha = FALSE)
 
+k = 4
+  g1 <- rmnorm(n = 10, mean = rep(20, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g2 <- rmnorm(n = 10, mean = rep(40, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  g3 <- rmnorm(n = 10, mean = rep(60, 20), diag(35, 20)) %>%
+    t() %>%
+    data.frame()
+  
+  
+  yes_structure <- rbind(g1, g2, g3) %>%
+    data.frame() %>%
+    mutate(Group = c(rep("1", 20), rep("2", 20), rep("3", 20)))
+  
+  yes_structure_scale <- lapply(yes_structure[,1:10], scale) %>% as_tibble()
+  
+  ### adds outliers - but not as a single group. Here we have an outlier that includes a really big one, a really small observation, and a very abnormal one
+  #add_outliers <- rbind(rnorm(10, 3, .5), rnorm(10, -3, .5), rnorm(10, c(rep(-2,3),rep(0,3),rep(2,3),0), .5)) %>% as_tibble()
+  
+  add_outliers <- rbind(c(rnorm(k, 1.5, .3), rnorm(10-k, 0, .3))) %>% as_tibble()
+  
+  names(add_outliers) <- names(yes_structure_scale)
+  
+  yes_structure_final <- bind_rows(yes_structure_scale, add_outliers) 
+  yes_structure_final$Group <- c(yes_structure$Group, rep("Outlier",1))
+  
+  
+  ##### Visualize the data and store in a list
+  datplot2 <- yes_structure_final %>% mutate(Id = 1:nrow(yes_structure_final), Alpha = ifelse(Group %in% 'Outlier', 1,0.8)) %>%  pivot_longer(1:10) %>%  mutate(name = factor(name, levels = c(paste0("X",1:10)))) %>% ggplot(aes(name, value, color = Group, group = Id, alpha = Alpha)) + geom_line() + geom_point() + ggtitle("4 Influential Dimensions") + guides(alpha = FALSE)
+  
+ggarrange(datplot1, datplot2, ncol = 2, nrow = 1)
 
-plot(x = c(1,2,3,4), y = unlist(templist), type = "l", xlab = "Number of Points In Different Mean Group", ylab = "Detection Rate")
-points(x = c(1,2,3,4), y = unlist(templist), pch = 20)
-title("Detection Rates By Sparsity of Outlier - MDS")
 ```
 
 
 
-In truly high dimensional data, it is possible that an observation may only differ substantively on a small number (say 1 or 2) of features in a dataset with potentially thousands of dimensions.  The computational cost of PERMANOVA on such a large dataset would be expensive in such a case. 
+
+
+The results are not surprising; for the methods where influential points more heavily impact the shape of the resulting map, the rate of correct detections of influential points increases as the observation differs from the main group on more dimensions. For the MDS maps, detection rates appear to increase up to the point where shifting the individual dimension from one group to another shifts the entire observation's group membership - at that point, at least in a situation where the "influence" from an observation is shifting from one group to a second group, we would expect to see a nearly symmetric decrease in detection rates (since being outlying in 1 dimension and "regular" in 9 dimensions is essentially the opposite scenario of being outlying in 9 dimensions and "regular" in 1).
+
+The PERMANOVA method appears to detect influential points for Sammon maps at a slightly higher rate as the number of features increases, but it does so inconsistently and even decreases from 3 to 4 features.  For t-SNE, there does not appear to be a distinct increase in detection rates based on the sparsity of the dimensionality of the influential point; however, given the performance of the technique previously discussed with t-SNE, this is not unexpected.  
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#show plot with number of features on X axis and detection rate on y axis
+
+#df3list <- readRDS("C:/Users/paulh/Documents/Doctoral Work/InfluenceInMaps/2021-11-21_SparsitySimulation_mds_list.RDS")
+
+df2list <- readRDS("2022-01-16_SparsitySimulation_mds_list.RDS")
+df3list <- readRDS("2022-01-16_SparsitySimulation_tsne_list.RDS")
+df4list <- readRDS("2022-01-16_SparsitySimulation_sammon_list.RDS")
+
+convertList <- function(listob){
+  
+  TF <- matrix(TRUE, nrow = length(listob[[1]]), ncol = length(listob))
+  templist <- list()
+  
+  for (i in 1:(length(listob))){
+    
+    temp <- rep(TRUE, 100)
+    ## Identification Rate at given K
+    for(j in 1:length(listob[[1]])){
+      temp[j] <- tail(listob[[i]][[j]]$PValues,1)<0.05
+      
+    }
+    TF[,i] <- temp
+    templist[[i]] <- sum(temp)/100
+    
+  }
+  return(templist)}
+
+templist <- convertList(df2list)
+templist2 <- convertList(df3list)
+templist3 <- convertList(df4list)
+
+
+## create GGplot
+
+temp = tibble(Features = c(1,2,3,4,5), MDS = unlist(templist), TSNE = unlist(templist2), Sammon = unlist(templist3))
+temp %>% pivot_longer(cols = c('MDS', 'TSNE', 'Sammon'), names_to = "Method", values_to = "Detection_Rate") %>% 
+  ggplot(aes(Features, Detection_Rate, group = Method, color = Method)) + geom_point() + geom_line() + 
+  ggtitle("Detection Rates by Mapping Method") + theme_bw() + xlab("Number of 'Influential' Features")+ 
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+
+# plot(x = c(1,2,3,4), y = unlist(templist), type = "l", xlab = "Number of Points In Different Mean Group", ylab = "Detection Rate")
+# points(x = c(1,2,3,4), y = unlist(templist), pch = 20)
+# title("Detection Rates By Sparsity of Outlier - MDS")
+```
 
 
 
-## Perplexity
+## A Note on Sample Size and Dimensionality
 
-We also assessed the sensitivity of t-SNE's ability to identify influential points at various different levels of perplexity. 
-
-## Sample Size and Dimensionality
-
-Two factors have the potential to greatly impact the computational complexity of generating maps: the dimensionality of the dataset and the sample size considered. For each of the mapping techniques examined, we assessed the 
+Two factors have the potential to greatly impact the computational complexity of generating maps: the dimensionality of the dataset and the sample size considered. The PERMANOVA step in the method can use either a pre-specified number of permutations, or it can be based on a permutation matrix that includes each of the permuted indices as rows.  In small sample size situations, we utilize an exact p-value that is calculated using all of the possible permutations of the indicator variable as the explanatory variable consists only of a single 1 and the rest 0's.  Thus, there are only $n$ distinct permutations to explore.  In larger sample size scenarios, it may not be computationally feasible to consider every possible permutation of the indicator; instead, a raw number of permutations can be calculated and an estimated p-value can be calculated. 
 
 
-The PERMANOVA step in the method can use either a pre-specified number of permutations, or it can be based on a permutation matrix that includes each of the permuted indices as rows.  In small sample size situations, we utilize an exact p-value that is calculated using all of the possible permutations of the indicator variable as the explanatory variable consists only of a single 1 and the rest 0's.  Thus, there are only $n$ distinct permutations to explore.  In larger sample size scenarios, it may not be computationally feasible to consider every possible permutation of the indicator; instead, a raw number of permutations can be calculated and an estimated p-value can be calculated. 
+In truly high dimensional data, it is possible that an observation may only differ substantively on a small number (say 1 or 2) of features in a dataset with potentially thousands of dimensions.  The computational cost of PERMANOVA on such a large dataset would be expensive in such a case.  In such a case, it may be useful to consider a method for trimming out the number of features considered.  Using a method such as penalized matrix decomposition or sparse clustering (Witten et al., 2009; Witten and Tibshirani, 2010) to trim noise features might reduce the complexity of the initial feature set used in the map.  Additionally, in the style of t-SNE, a "whitening" process could be used by initializing one of the mapping methods used here with PCA (Van der Maaten, 2010).  Methods for pre-processing the data prior to PERMANOVA-based influence detection is left as an avenue for future research, but might prove the key to computational feasibility on vastly more complex datasets than those considered here.  
+
+
+
+
+
 
 
 
@@ -660,7 +758,11 @@ Additionally, examining additional mapping techniques may be worthwhile as well.
 
 
 
+# Appendix 
 
+## Perplexity
+
+We also assessed the sensitivity of t-SNE's ability to identify influential points at various different levels of perplexity. 
 
 
 

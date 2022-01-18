@@ -1,5 +1,5 @@
 ## Simulation Script
-## October 5, 2021
+## January 14, 2022
 
 ## Paul Harmon
 
@@ -28,7 +28,8 @@ library(plotly)
 library(R.utils)
 library(vegan)
 library(mnormt)
-
+library(MASS)
+start = Sys.time()
 
 
 #### Initialize lists and variables ---------------------------------------------#
@@ -43,7 +44,8 @@ plot_tsne_fstat_results_list <- list()
 plot_mds_fstat_results_list <- list()
 results_list <- list()
 results_list_cmd <- list()
-df3list = df2list = list()
+results_list_sammon <- list()
+df4list = df3list = df2list = list()
 perf_time <- list()
 perf_time_cmd <- list()
 
@@ -62,7 +64,8 @@ for(k in 1:5){
   plot_mds_fstat_results_list[[k]] <- list()
   results_list[[k]] <- list()
   results_list_cmd[[k]] <- list()
-  df3list[[k]] <- df2list[[k]] <- list()
+  results_list_sammon[[k]] <- list()
+  df4list[[k]] <-df3list[[k]] <- df2list[[k]] <- list()
   perf_time[[k]] <- list()
   perf_time_cmd[[k]] <- list()
   
@@ -108,21 +111,14 @@ for(k in 1:5){
     
     #### Run the Permanova mapping (for t-SNE)
     
-    # xTSNE <- MultiPermanova(yes_structure_final[,1:10], maptype = "tSNE", perp_val = 20)
-    # results_list[[k]][[j]] <- xTSNE
-    # 
-    # df2 = tibble(Holdout = 1:length(xTSNE$modellist), PValues = sapply(xTSNE$modellist, pullPval), Fstat = sapply(xTSNE$modellist, pullFstat))
-    # df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
-    # df2list[[k]][[j]] = df2
-    # 
-    # #### TSNE Plots########################################################
-    # #Visualize the results and store in a list
-    # sigplot <- ggplot(df2, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: P-Values From Adonis")
-    # plot_tsne_results_list[[k]][[j]] <- sigplot
-    # 
-    # #Visualize the f stats and store in a list
-    # sigplotf <- ggplot(df2, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("t-SNE: F Stats From Adonis")
-    # plot_tsne_fstat_results_list[[k]][[j]] <- sigplotf
+     xTSNE <- MultiPermanova(yes_structure_final[,1:10], maptype = "tSNE", perp_val = 20)
+     results_list[[k]][[j]] <- xTSNE
+    
+     
+    
+     df2 = tibble(Holdout = 1:length(xTSNE$modellist), PValues = sapply(xTSNE$modellist, pullPval), Fstat = sapply(xTSNE$modellist, pullFstat))
+     df2$Colors <- ifelse(df2$PValues < 0.05, TRUE, FALSE)
+     df2list[[k]][[j]] = df2
     
     
     
@@ -139,13 +135,18 @@ for(k in 1:5){
     df3list[[k]][[j]] = df3
     
     
-    #Visualize the results and store in a list
-    sigplot2 <- ggplot(df3, aes(Holdout, PValues)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: P-Values From Adonis")
-    plot_mds_results_list[[k]][[j]] <- sigplot2
+    #### Run the Permanova mapping (for MDS)
     
-    #Visualize the f stats and store in a list
-    sigplot2f <- ggplot(df3, aes(Holdout, Fstat)) + geom_point(aes(color = Colors), size = 2) + geom_line(alpha = 0.5, color = "grey") + theme_bw() + ggtitle("CMD: F Stats From Adonis")
-    plot_mds_fstat_results_list[[k]][[j]] <- sigplot2f
+    xSammon <- MultiPermanova(yes_structure_final[,1:10], maptype = "Sammon")
+    results_list_sammon[[k]][[j]] <- xSammon
+    
+    ### Sammon ############################################################
+    
+    df4 = tibble(Holdout = 1:length(xSammon$modellist), PValues = sapply(xSammon$modellist, pullPval), Fstat = sapply(xSammon$modellist, pullFstat))
+    df4$Colors <- ifelse(df4$PValues < 0.05, TRUE, FALSE)
+    df4list[[k]][[j]] = df4
+    
+    
     
     
   }
@@ -174,32 +175,33 @@ correctNonInfluence = function(result_df){
 
 #note - these will give values per run - so we need to take a look across the simulations
 
-#t-SNE
-ci1 <- sapply(df2list, correctInfluence)
-cni1 <- sapply(df2list, correctNonInfluence)
+# #t-SNE
+# ci1 <- sapply(df2list, correctInfluence)
+# cni1 <- sapply(df2list, correctNonInfluence)
+# 
+# 
+# #MDS
+# ci2 <- sapply(df3list, correctInfluence)
+# cni2 <- sapply(df3list, correctNonInfluence)
+# 
+# 
+# #mean detection rates
+# mean(ci1)
+# mean(cni1)
+# 
+# mean(ci2)
+# mean(cni2)
 
 
-#MDS
-ci2 <- sapply(df3list, correctInfluence)
-cni2 <- sapply(df3list, correctNonInfluence)
-
-
-#mean detection rates
-mean(ci1)
-mean(cni1)
-
-mean(ci2)
-mean(cni2)
-
-## Code runs in about 2.5 hours with 100 simulations
 
 ## Which components do we save? 
 ##
+end = Sys.time()
 
 #saves the output tables with p-values and F-stats (we can make plots from this)
-#saveRDS(df2list, paste0(Sys.Date(), "_SparsitySimulation_tsne_list.RDS"))
+saveRDS(df2list, paste0(Sys.Date(), "_SparsitySimulation_tsne_list.RDS"))
 saveRDS(df3list, paste0(Sys.Date(), "_SparsitySimulation_mds_list.RDS"))
-
+saveRDS(df4list, paste0(Sys.Date(), "_SparsitySimulation_sammon_list.RDS"))
 
 
 
